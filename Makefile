@@ -205,6 +205,10 @@ verifyReleaseGiven:
 	)
 
 verifyPrivateKeyExists:
+	test -n "{$keyId}" || (												\
+		echo "Please specify a keyId!";									\
+		echo; exit 1;													\
+	)
 	gpg --list-secret-keys ${keyId} > /dev/null 2>&1 || (				\
 		echo "No private key matching '${keyId}'"; 						\
 		echo; exit 1													\
