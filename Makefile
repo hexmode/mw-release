@@ -50,8 +50,7 @@ downloadTarball:
 downloadAndVerifyFile:
 	${MAKE} downloadFile targetFile=${targetFile} || true
 	test ! -f ${targetDir}/${targetFile} ||								\
-		${MAKE} downloadFile targetFile=${targetFile}.sig ||			\
-		${continueWithoutSignature}
+		${MAKE} downloadFile targetFile=${targetFile}.sig || ${noSigOk}
 	test ! -f ${targetDir}/${targetFile} -o								\
 		! -f ${targetDir}/${targetFile}.sig ||							\
 		${MAKE} verifyFile targetFile=${targetFile}
@@ -112,15 +111,14 @@ tag: verifyReleaseGiven verifyTagNotExist verifyPrivateKeyExists checkoutRelBran
 		echo; exit 1													\
 	)
 
-	echo Tagging submodules...
-	(																	\
+	test -n "$(filter-out true,${doTags})" || (							\
+		echo Tagging submodules...;										\
 		cd ${mwDir};													\
 		${GIT} submodule -q	foreach										\
 			git tag -sa ${releaseVer} -m ${releaseTagMsg};				\
+		echo Tagging core...;											\
+		${GIT} tag -sa ${releaseVer} -m ${releaseTagMsg}				\
 	)
-
-	echo Tagging core...
-	${GIT} tag -sa ${releaseVer} -m ${releaseTagMsg}
 
 # Remove the tag specified in releaseVer.
 removeTag: verifyReleaseGiven
@@ -222,7 +220,7 @@ verifyRevisionExists: clone
 	)
 
 verifyTagNotExist: verifyReleaseGiven clone
-	test -z "`cd ${mwDir};												\
+	test -n "$(filter-out true,${doTags})" -o -z "`cd ${mwDir};		\
 		${GIT} log -1 --oneline ${releaseVer} 2> /dev/null`" || (		\
 			echo "Release tag already set!";							\
 			echo; exit 1												\
