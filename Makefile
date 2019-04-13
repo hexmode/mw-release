@@ -60,7 +60,7 @@ downloadFile:
 
 	test -f ${targetDir}/${targetFile} || (								\
 		echo -n Downloading ${targetFile}...;							\
-		${CURL} ${releasesUrl}${majorReleaseVer}/${targetFile}			\
+		${WGET} ${releasesUrl}${majorReleaseVer}/${targetFile}			\
 			-o ${targetDir}/${targetFile} || (							\
 			echo; echo Could not download ${targetFile}; 				\
 			echo; exit 1												\

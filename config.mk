@@ -2,9 +2,14 @@ ifndef VERBOSE
 .SILENT: # Don't print commands
 phpOpts=-d error_reporting=30711
 composerQuiet=--quiet
-curlQuiet=-s
+wgetQuiet=-q
 maintQuiet=-q
 endif
+
+# Following are variables for commands that need args
+GIT=git --work-tree=${mwDir} --git-dir=${mwDir}/.git
+MAKE=make -f $(abspath $(firstword $(MAKEFILE_LIST))) indent="${indent}\> "
+WGET=wget ${wgetQuiet} -O -
 
 thisDir=$(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 releasesUrl=https://releases.wikimedia.org/mediawiki/
@@ -42,7 +47,7 @@ ifeq "${thisMinorVer}" "0"
 		$(shell echo ${releaseVer} | cut -d . -f 1).$(shell				\
 		echo ${releaseVer} | (cut -d . -f 2; echo 1 - p ) | dc ),---))
 	prevReleaseVer=${prevMajorVer}.$(shell								\
-		curl -s ${releasesUrl}${prevMajorVer}/ |						\
+		${WGET} ${releasesUrl}${prevMajorVer}/ |						\
 		awk '/mediawiki-${prevMajorVer}[0-9.]*.tar.gz"/ {gsub(			\
 		/^.*="mediawiki-${prevMajorVer}.|.tar.gz"[^"]*$$/,				\
 		""); print}' | sort -n | tail -1)
@@ -95,8 +100,3 @@ export mwGit
 doNotFail=$(if $(filter-out true,${noSigOk}),true,false)
 releaseDir=/opt/release
 makeRelease=${releaseDir}/make-release/makerelease2.py
-
-# Following are variables for commands that need args
-GIT=git --work-tree=${mwDir} --git-dir=${mwDir}/.git
-MAKE=make -f $(abspath $(firstword $(MAKEFILE_LIST))) indent="${indent}\> "
-CURL=curl -f ${curlQuiet}
