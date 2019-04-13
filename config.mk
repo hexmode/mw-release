@@ -1,3 +1,4 @@
+# -*- tab-width: 4 -*-
 ifndef VERBOSE
 .SILENT: # Don't print commands
 phpOpts=-d error_reporting=30711
@@ -9,7 +10,7 @@ endif
 # Following are variables for commands that need args
 GIT=git --work-tree=${mwDir} --git-dir=${mwDir}/.git
 MAKE=make -f $(abspath $(firstword $(MAKEFILE_LIST))) indent="${indent}\> "
-WGET=wget ${wgetQuiet} -O -
+WGET=wget ${wgetQuiet}
 
 thisDir=$(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 releasesUrl=https://releases.wikimedia.org/mediawiki/
@@ -36,7 +37,7 @@ prevMinorVer=$(strip $(if ${thisMinorVer},								\
 	$(shell (echo ${thisMinorVer}; echo 1 - p) | dc )))
 
 # The version to diff against
-prevReleaseVer ?= $(if $(filter-out ---,${majorReleaseVer})			\
+prevReleaseVer ?= $(if $(filter-out ---,${majorReleaseVer})				\
 	,${majorReleaseVer}.${prevMinorVer},---)
 # Is thisMinorVer a zero
 ifeq "${thisMinorVer}" "0"
@@ -47,7 +48,7 @@ ifeq "${thisMinorVer}" "0"
 		$(shell echo ${releaseVer} | cut -d . -f 1).$(shell				\
 		echo ${releaseVer} | (cut -d . -f 2; echo 1 - p ) | dc ),---))
 	prevReleaseVer=${prevMajorVer}.$(shell								\
-		${WGET} ${releasesUrl}${prevMajorVer}/ |						\
+		${WGET} -O - ${releasesUrl}${prevMajorVer}/ |					\
 		awk '/mediawiki-${prevMajorVer}[0-9.]*.tar.gz"/ {gsub(			\
 		/^.*="mediawiki-${prevMajorVer}.|.tar.gz"[^"]*$$/,				\
 		""); print}' | sort -n | tail -1)
@@ -86,7 +87,7 @@ export keyId
 noSigOk ?= true
 export noSigOk
 
-# Check for tags to determine if build has been done?
+# Check for tags to determine if build has been done
 doTags ?= true
 export doTags
 

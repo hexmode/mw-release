@@ -1,3 +1,4 @@
+# -*- tab-width: 4 -*-
 include help.mk
 include config.mk
 
@@ -61,7 +62,7 @@ downloadFile:
 	test -f ${targetDir}/${targetFile} || (								\
 		echo -n Downloading ${targetFile}...;							\
 		${WGET} ${releasesUrl}${majorReleaseVer}/${targetFile}			\
-			-o ${targetDir}/${targetFile} || (							\
+			-O ${targetDir}/${targetFile} || (							\
 			echo; echo Could not download ${targetFile}; 				\
 			echo; exit 1												\
 		) || exit 1;													\
