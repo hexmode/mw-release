@@ -8,7 +8,7 @@ maintQuiet=-q
 endif
 
 # Following are variables for commands that need args
-GIT=git --work-tree=${mwDir} --git-dir=${mwDir}/.git
+GIT=git --no-pager --work-tree=${mwDir} --git-dir=${mwDir}/.git
 MAKE=make -f $(abspath $(firstword $(MAKEFILE_LIST))) indent="${indent}\> "
 WGET=wget ${wgetQuiet}
 
@@ -84,7 +84,7 @@ keyId ?= $(shell gpgconf --list-options gpg | 							\
 export keyId
 
 # Continue without signature after downloading
-noSigOk ?= true
+noSigOk ?= false
 export noSigOk
 
 # Check for tags to determine if build has been done
@@ -101,3 +101,5 @@ export mwGit
 doNotFail=$(if $(filter-out true,${noSigOk}),true,false)
 releaseDir=/opt/release
 makeRelease=${releaseDir}/make-release/makerelease2.py
+
+defSet=includes/DefaultSettings.php

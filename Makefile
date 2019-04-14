@@ -1,13 +1,16 @@
 # -*- tab-width: 4 -*-
-include help.mk
-include config.mk
+# from https://stackoverflow.com/questions/18136918/how-to-get-current-relative-directory-of-your-makefile
+mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
+current_dir := $(patsubst %/,%,$(dir $(mkfile_path)))
+include ${current_dir}/help.mk
+include ${current_dir}/config.mk
 
 # Checkout, tag, and build a tarball
 tarball: tag doTarball
 
 # Just build tarball with already checkedout code
 doTarball: verifyReleaseGiven verifyPreviousVersion getMakeRelease		\
-		getPreviousTarball
+		getPreviousTarball git-archive-all verifyWgVersion
 	test -f ${mwDir}/.git/config || (									\
 		echo "Check out repo first: make tarball";						\
 		echo; exit 1													\
@@ -45,7 +48,7 @@ downloadTarball:
 	${MAKE} downloadAndVerifyFile										\
 		targetFile=mediawiki-${releaseVer}.patch.gz || ${doNotFail}
 	${MAKE} downloadAndVerifyFile 										\
-		targetFile=mediawiki-i18n-${releaseVer}.patch.gz || ${doNotFail}
+		targetFile=mediawiki-i18n-${releaseVer}.patch.gz || true
 
 #
 downloadAndVerifyFile:
@@ -86,7 +89,7 @@ ${releaseDir}/.git:
 
 # Tag the checkout with the releaseVer.
 tag: verifyReleaseGiven verifyTagNotExist verifyPrivateKeyExists checkoutRelBranch
-	# Without the cd, this fails with "fatal: $program_name cannot
+	# Without the cd, this fails with "fatal: $$program_name cannot
 	# be used without a working tree." on git v2.11.0
 	echo "Ensuring submodules are up to date ..."
 	(																	\
@@ -116,9 +119,9 @@ tag: verifyReleaseGiven verifyTagNotExist verifyPrivateKeyExists checkoutRelBran
 		echo Tagging submodules...;										\
 		cd ${mwDir};													\
 		${GIT} submodule -q	foreach										\
-			git tag -sa ${releaseVer} -m ${releaseTagMsg};				\
+			git tag -a ${releaseVer} -m ${releaseTagMsg};				\
 		echo Tagging core...;											\
-		${GIT} tag -sa ${releaseVer} -m ${releaseTagMsg}				\
+		${GIT} tag -a ${releaseVer} -m ${releaseTagMsg}					\
 	)
 
 # Remove the tag specified in releaseVer.
@@ -136,12 +139,13 @@ removeTag: verifyReleaseGiven
 clone:
 	test -f ${mwDir}/.git/config && (									\
 		echo "Fetching the latest code ...";							\
-		${GIT} fetch 													\
+		${GIT} checkout ${relBranch};									\
+		${GIT} pull 													\
 		$(if $(filter-out false,${fetchSubmodules}),					\
 			--recurse-submodules=yes)									\
 	) || (																\
 		echo "Cloning repository ...";									\
-		git clone														\
+		git clone -b ${relBranch}										\
 		$(if $(filter-out false,${fetchSubmodules}),					\
 			--recurse-submodules)										\
 			${mwGit} ${mwDir}											\
@@ -221,7 +225,7 @@ verifyRevisionExists: clone
 	)
 
 verifyTagNotExist: verifyReleaseGiven clone
-	test -n "$(filter-out true,${doTags})" -o -z "`cd ${mwDir};		\
+	test -n "$(filter-out true,${doTags})" -o -z "`cd ${mwDir};			\
 		${GIT} log -1 --oneline ${releaseVer} 2> /dev/null`" || (		\
 			echo "Release tag already set!";							\
 			echo; exit 1												\
@@ -229,9 +233,22 @@ verifyTagNotExist: verifyReleaseGiven clone
 
 verifyPreviousVersion:
 
+verifyWgVersion:
+	${GIT} grep -q "\$$wgVersion = \'${releaseVer}\'" -- ${defSet} || (	\
+		echo "\$$wgVersion is not set to ${releaseVer} in ${defSet}!";	\
+		${GIT} grep "\$$wgVersion = \'" -- ${defSet};					\
+		exit 2															\
+	)
+
 # This was useful when we put the Makefile together, but now this done
 # in the creation of the docker image.
 #
 installGitArchiveAll:
 	pip list --format=legacy | grep git-archive-all > /dev/null ||		\
 		pip install git-archive-all
+
+git-archive-all:
+	pip3 install git-archive-all || (									\
+		echo Try \"sudo make git-archive-all\"							\
+		exit 2															\
+	)
