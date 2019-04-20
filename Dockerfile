@@ -1,6 +1,4 @@
 FROM alpine:3.9
-COPY Makefile /
-COPY *.mk /
 RUN apk add --no-cache	\
         git		\
         gnupg		\
@@ -9,4 +7,5 @@ RUN apk add --no-cache	\
         util-linux	\
 	wget
 RUN pip3 install --upgrade pip
+COPY Makefile *.mk /
 ENTRYPOINT ["make"]

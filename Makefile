@@ -13,7 +13,7 @@ tarball: tag doTarball
 doTarball: verifyReleaseGiven verifyPreviousVersion getMakeRelease		\
 		getPreviousTarball git-archive-all verifyWgVersion
 	test -f ${mwDir}/.git/config || (									\
-		echo "Check out repo first: make tarball";						\
+		echo ${indent}"Check out repo first: make tarball";				\
 		echo; exit 1													\
 	)
 
@@ -38,7 +38,7 @@ getPreviousTarball:
 # Download all artifacts for a release.
 downloadTarball:
 	test -n "${thisMinorVer}" || (										\
-		echo "Minor version not found in '${releaseVer}'!";				\
+		echo ${indent}"Minor version not found in '${releaseVer}'!";	\
 		echo; exit 1													\
 	)
 
@@ -53,13 +53,15 @@ downloadTarball:
 
 #
 downloadAndVerifyFile:
-	${MAKE} downloadFile targetFile=${targetFile} || true
+	${MAKE} ${targetDir}/${targetFile}
 	test ! -f ${targetDir}/${targetFile} ||								\
 		${MAKE} downloadFile targetFile=${targetFile}.sig || ${noSigOk}
 	test ! -f ${targetDir}/${targetFile} -o								\
 		! -f ${targetDir}/${targetFile}.sig ||							\
 		${MAKE} verifyFile targetFile=${targetFile}
 
+
+${targetDir}/${targetFile}: downloadFile
 downloadFile:
 	mkdir -p ${targetDir}
 
@@ -89,10 +91,12 @@ ${releaseDir}/.git:
 		${releaseDir}
 
 # Tag the checkout with the releaseVer.
-tag: verifyReleaseGiven verifyTagNotExist verifyPrivateKeyExists checkoutRelBranch
+tag: verifyReleaseGiven verifyTagNotExist verifyPrivateKeyExists
+	${MAKE} ${mwDir}/${relBranch}
+
 	# Without the cd, this fails with "fatal: $$program_name cannot
 	# be used without a working tree." on git v2.11.0
-	echo "Ensuring submodules are up to date ..."
+	echo ${indent}"Ensuring submodules are up to date ..."
 	(																	\
 		cd ${mwDir};													\
 		${GIT} submodule -q foreach										\
@@ -103,7 +107,7 @@ tag: verifyReleaseGiven verifyTagNotExist verifyPrivateKeyExists checkoutRelBran
 		export modules=`${GIT} status -s extensions skins |				\
 			awk '{print $$2}'`;											\
 		test -z "$$modules" || (										\
-			echo "Committing submodules: $$modules";					\
+			echo ${indent}"Committing submodules: $$modules";			\
 			cd ${mwDir};												\
 			${GIT} add $$modules;										\
 			${GIT} commit -m "Updating submodules for ${releaseVer}"	\
@@ -112,7 +116,7 @@ tag: verifyReleaseGiven verifyTagNotExist verifyPrivateKeyExists checkoutRelBran
 	)
 
 	test `${GIT} status -s | wc -l` -eq 0 || (							\
-		echo "There is uncommitted work!";								\
+		echo ${indent}"There is uncommitted work!";						\
 		echo; exit 1													\
 	)
 
@@ -126,9 +130,11 @@ tag: verifyReleaseGiven verifyTagNotExist verifyPrivateKeyExists checkoutRelBran
 	)
 
 # Remove the tag specified in releaseVer.
+maybeSubmodules=$(if $(filter-out false,${fetchSubmodules}),			\
+	--recurse-submodules)
+
 removeTag: verifyReleaseGiven
-	${GIT} fetch $(if $(filter-out false,${fetchSubmodules}),			\
-				--recurse-submodules=yes)
+	${GIT} fetch ${maybeSubmodules}
 	(																	\
 		cd ${mwDir};													\
 		${GIT} submodule foreach										\
@@ -136,41 +142,28 @@ removeTag: verifyReleaseGiven
 	)
 	${GIT} tag -d ${releaseVer}
 
-
 clone:
-	test -f ${mwDir}/.git/config && (									\
-		echo "Fetching the latest code ...";							\
-		${GIT} checkout ${relBranch};									\
-		${GIT} pull 													\
-		$(if $(filter-out false,${fetchSubmodules}),					\
-			--recurse-submodules=yes)									\
-	) || (																\
-		echo "Cloning repository ...";									\
-		git clone -b ${relBranch}										\
-		$(if $(filter-out false,${fetchSubmodules}),					\
-			--recurse-submodules)										\
-			${mwGit} ${mwDir}											\
+	test ! -d ${targetDir} || (											\
+		echo ${indent}"Cloning ${repo} to ${cloneDir} (${relBranch})";	\
+		git clone ${maybeSubmodules} -b ${relBranch} ${repo}			\
+			${cloneDir}												\
+	) && (																\
+		echo ${indent}"Updating ${repo} in ${targetDir}";				\
+		cd ${targetDir};												\
+		git fetch ${maybeSubmodules}									\
 	)
 
-# Checkout relBranch
-checkoutRelBranch: clone
+${mwDir}/${relBranch}:
 	test "${relBranch}" != "---" || (									\
-		echo "No release branch given";									\
+		echo ${indent}"No release branch given";						\
 		echo; exit 1													\
 	)
-
-	echo "Checking out release branch (${relBranch})..."
-	${GIT} checkout -q ${relBranch}
-  ifneq	"false" "${fetchSubmodules}"
-	(																	\
-		cd ${mwDir};													\
-		git submodule update --init;									\
-	)
-  endif
+	${MAKE} clone cloneDir=${mwDir}/master repo=${mwGit}
+	${MAKE} clone cloneDir=${mwDir}/${relBranch} repo=${mwDir}/master
 
 # Show revision matching HEAD.
 showHeadRev: fetchSubmodules=false
-showHeadRev: clone checkoutRelBranch
+showHeadRev: ${mwDir}/${relBranch}
 	${GIT} log -1 --oneline
 
 # Show information about the key used for signing.
@@ -178,16 +171,17 @@ showKeyInfo:
 	gpg --list-key ${keyId}
 
 # Make sure the releaseVer tag is signed correctly.
-verifyTag: verifyReleaseGiven checkoutRelBranch
-	echo "Checking core"
+verifyTag: verifyReleaseGiven
+	${MAKE} ${mwDir}/${relBranch}
+	echo ${indent}"Checking core"
 	${GIT} verify-tag ${releaseVer} || (								\
-		echo "Cannot verify signature on tag '${releaseVer}'";			\
+		echo ${indent}"Cannot verify signature on tag '${releaseVer}'";	\
 		echo; exit 1													\
 	)
 	test "${revision}" = "HEAD" || (									\
 		test "`${GIT} log -1 ${releaseVer} --format=%H`" =				\
 			"${revision}" || (											\
-				echo "Wrong revision tagged.";							\
+				echo ${indent}"Wrong revision tagged.";					\
 				echo; exit 1											\
 		)																\
 	)
@@ -196,7 +190,7 @@ verifyTag: verifyReleaseGiven checkoutRelBranch
 		${GIT} submodule foreach
 			'git fetch && git verify-tag ${releaseVer} || (				\
 				echo -n Could not verify signature on;					\
-				echo " ${releaseVer} for $$name";						\
+				echo ${indent}" ${releaseVer} for $$name";				\
 				echo; exit 1											\
 			)';															\
 	)
@@ -204,31 +198,32 @@ verifyTag: verifyReleaseGiven checkoutRelBranch
 #
 verifyReleaseGiven:
 	test "${releaseVer}" != "---" || (									\
-		echo "Please specify releaseVer!";								\
+		echo ${indent}"Please specify releaseVer!";						\
 		echo; exit 1													\
 	)
 
 verifyPrivateKeyExists:
 	test -n "{$keyId}" || (												\
-		echo "Please specify a keyId!";									\
+		echo ${indent}"Please specify a keyId!";						\
 		echo; exit 1;													\
 	)
 	gpg --list-secret-keys ${keyId} > /dev/null 2>&1 || (				\
-		echo "No private key matching '${keyId}'"; 						\
+		echo ${indent}"No private key matching '${keyId}'"; 			\
 		echo; exit 1													\
 	)
 
 
-verifyRevisionExists: clone
+verifyRevisionExists: ${mwDir}/${relBranch}
 	$(if $(filter-out 0,$(shell ${GIT} ls-tree ${revision} | wc -l)),	\
 		exit 0,															\
 		exit 1															\
 	)
 
-verifyTagNotExist: verifyReleaseGiven clone
+verifyTagNotExist: verifyReleaseGiven
+	${MAKE} clone cloneDir=${mwDir}/master repo=${mwGit}
 	test -n "$(filter-out true,${doTags})" -o -z "`cd ${mwDir};			\
 		${GIT} log -1 --oneline ${releaseVer} 2> /dev/null`" || (		\
-			echo "Release tag already set!";							\
+			echo ${indent}"Release tag already set!";					\
 			echo; exit 1												\
 	)
 
@@ -236,7 +231,8 @@ verifyPreviousVersion:
 
 verifyWgVersion:
 	${GIT} grep -q "\$$wgVersion = \'${releaseVer}\'" -- ${defSet} || (	\
-		echo "\$$wgVersion is not set to ${releaseVer} in ${defSet}!";	\
+		echo ${indent}"\$$wgVersion is not set to"						\
+			"${releaseVer} in ${defSet}!";								\
 		${GIT} grep "\$$wgVersion = \'" -- ${defSet};					\
 		exit 2															\
 	)

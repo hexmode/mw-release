@@ -92,14 +92,14 @@ doTags ?= true
 export doTags
 
 #
-targetDir ?= ${thisDir}/target
+targetDir ?= ${workDir}/target
 export targetDir
 
 mwGit ?= ${gerritHead}/mediawiki/core
 export mwGit
 
 doNotFail=$(if $(filter-out true,${noSigOk}),true,false)
-releaseDir=/opt/release
+releaseDir=${workDir}/release
 makeRelease=${releaseDir}/make-release/makerelease2.py
 
 defSet=includes/DefaultSettings.php
