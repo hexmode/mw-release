@@ -3,10 +3,10 @@
 
 # from https://stackoverflow.com/questions/18136918/how-to-get-current-relative-directory-of-your-makefile
 mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
-current_dir := $(patsubst %/,%,$(dir $(mkfile_path)))
-include ${current_dir}/help.mk
-include ${current_dir}/config.mk
-include ${current_dir}/gpg.mk
+mkfile_dir := $(patsubst %/,%,$(dir $(mkfile_path)))
+include ${mkfile_dir}/help.mk
+include ${mkfile_dir}/config.mk
+include ${mkfile_dir}/gpg.mk
 
 # Checkout, tag, and build a tarball
 tarball: tag doTarball
@@ -260,3 +260,12 @@ git-archive-all:
 			exit 2														\
 		)																\
 	)
+
+# Test docker creation and use
+self-test:
+	docker build -t mw-ab  -f ${mkfile_dir}/Dockerfile ${mkfile_dir}
+	docker run --volume ${mkfile_dir}/src:/src -e						\
+		GNUPGHOME=/src/.gpg mw-ab										\
+		explain="make args after (and including) this"					\
+		tarball VERBOSE=${VERBOSE} doTags=false tarball					\
+		releaseVer=$(if $(subst ---,,${releaseVer}),${releaseVer},1.32.0)
