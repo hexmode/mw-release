@@ -6,6 +6,7 @@ RUN apk add --no-cache	\
         gnupg		\
         make		\
         python3		\
-        util-linux
+        util-linux	\
+	wget
 RUN pip3 install --upgrade pip
 ENTRYPOINT ["make"]
