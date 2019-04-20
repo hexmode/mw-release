@@ -8,11 +8,13 @@ maintQuiet=-q
 endif
 
 # Following are variables for commands that need args
-GIT=git --no-pager --work-tree=${mwDir} --git-dir=${mwDir}/.git
-MAKE=make -f $(abspath $(firstword $(MAKEFILE_LIST))) indent="${indent}\> "
+GIT=git --no-pager --work-tree=${mwDir}/${relBranch}					\
+		--git-dir=${mwDir}/${relBranch}/.git
+MAKE=make -f $(abspath $(firstword ${MAKEFILE_LIST})) 					\
+	prevReleaseVer=${prevReleaseVer} indent="${indent}\> "
 WGET=wget ${wgetQuiet}
 
-thisDir=$(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+thisDir=$(patsubst %/,%,$(dir $(abspath $(lastword ${MAKEFILE_LIST}))))
 releasesUrl=https://releases.wikimedia.org/mediawiki/
 
 # Source of Gerrit
@@ -30,17 +32,22 @@ export releaseVer
 majorReleaseVer=$(strip $(if $(filter-out ---,${releaseVer}),			\
 	$(shell echo ${releaseVer} | cut -d . -f 1).$(shell 				\
 	echo ${releaseVer} | cut -d . -f 2),---))
-prevMajorVer=${majorReleaseVer}
+
 thisMinorVer=$(strip $(if $(filter-out ---,${releaseVer}),				\
 	$(shell echo ${releaseVer} | cut -d . -f 3)))
-prevMinorVer=$(strip $(if ${thisMinorVer},								\
-	$(shell (echo ${thisMinorVer}; echo 1 - p) | dc )))
+
+prevMajorVer=${majorReleaseVer}
+ifneq "${thisMinorVer}" "0"
+	prevMinorVer=$(shell (echo ${thisMinorVer}; echo 1 - p) | dc )
+else
+	prevMinorVer=-1
+endif
 
 # The version to diff against
-prevReleaseVer ?= $(if $(filter-out ---,${majorReleaseVer})				\
+prevReleaseVer=$(if $(subst ---,,${majorReleaseVer})					\
 	,${majorReleaseVer}.${prevMinorVer},---)
 # Is thisMinorVer a zero
-ifeq "${thisMinorVer}" "0"
+ifeq "${thisMinorVer}${prevMinorVer}" "0-1"
 	# Fine, find the previous version by fetching the list of
 	# previous major version releases, sorting them, and getting
 	# the last one.  Startup takes a few ms longer.
@@ -48,12 +55,14 @@ ifeq "${thisMinorVer}" "0"
 		$(shell echo ${releaseVer} | cut -d . -f 1).$(shell				\
 		echo ${releaseVer} | (cut -d . -f 2; echo 1 - p ) | dc ),---))
 	prevReleaseVer=${prevMajorVer}.$(shell								\
-		${WGET} -O - ${releasesUrl}${prevMajorVer}/ |					\
-		awk '/mediawiki-${prevMajorVer}[0-9.]*.tar.gz"/ {gsub(			\
-		/^.*="mediawiki-${prevMajorVer}.|.tar.gz"[^"]*$$/,				\
-		""); print}' | sort -n | tail -1)
+			test -f ${workDir}/out-${prevMajorVer} ||					\
+				${WGET} -O ${workDir}/out-${prevMajorVer}				\
+					${releasesUrl}${prevMajorVer}/)$(shell				\
+			cat ${workDir}/out-${prevMajorVer} | awk					\
+				'/mediawiki-${prevMajorVer}[0-9.]*.tar.gz"/ {gsub(		\
+				/^.*="mediawiki-${prevMajorVer}.|.tar.gz"[^"]*$$/,		\
+				""); print}' | sort -n | tail -1)
 endif
-export prevReleaseVer
 
 # The message to add when tagging
 releaseTagMsg ?= $(strip $(if $(filter-out ---,${releaseVer}),			\

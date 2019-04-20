@@ -14,18 +14,18 @@ tarball: tag doTarball
 # Just build tarball with already checkedout code
 doTarball: verifyReleaseGiven verifyPreviousVersion getMakeRelease		\
 		getPreviousTarball git-archive-all verifyWgVersion
-	test -f ${mwDir}/.git/config || (									\
+	test -f ${mwDir}/${relBranch}/.git/config || (									\
 		echo ${indent}"Check out repo first: make tarball";				\
 		echo; exit 1													\
 	)
 
 	mkdir -p ${targetDir}
 	${makeRelease} --previous ${prevReleaseVer} --sign					\
-		--output_dir ${targetDir} ${mwDir} ${releaseVer}
+		--output_dir ${targetDir} ${mwDir}/${relBranch} ${releaseVer}
 
 #
 showPreviousRelease:
-	echo ${prevReleaseVer}
+	echo "${prevReleaseVer}" 
 
 # Retreive all artifacts from the release server before releaseVer.
 getAllTarballs:
@@ -92,17 +92,28 @@ getMakeRelease: cloneDir=${releaseDir}
 getMakeRelease: branch=master
 getMakeRelease: clone
 
+commitId:
+	git config --global --get user.email >/dev/null || (				\
+		test -n "${gitCommitEmail}" &&									\
+			git config --global --add user.email ${gitCommitEmail} ||	\
+			( echo ${indent}"Set gitCommitEmail!"; exit 2 )						\
+	)
+	git config --global --get user.name >/dev/null || (					\
+		test -n "${gitCommitName}" &&									\
+			git config --global --add user.name ${gitCommitName} ||		\
+			( echo ${indent}"Set gitCommitName!"; exit 2 )						\
+	)
+
 # Tag the checkout with the releaseVer.
-tag: verifyReleaseGiven verifyTagNotExist verifyPrivateKeyExists
+tag: verifyReleaseGiven verifyTagNotExist verifyPrivateKeyExists commitId
 	${MAKE} ${mwDir}/${relBranch}
 
-	cd ${mwDir}/${relBranch}
 	(																	\
 		export modules=`${GIT} status -s extensions skins |				\
 			awk '{print $$2}'`;											\
 		test -z "$$modules" || (										\
 			echo ${indent}"Committing submodules: $$modules";			\
-			${GIT} add $$modules;										\
+			${GIT} add -f $$modules;										\
 			${GIT} commit -m "Updating submodules for ${releaseVer}"	\
 				$$modules												\
 		)																\
@@ -115,7 +126,7 @@ tag: verifyReleaseGiven verifyTagNotExist verifyPrivateKeyExists
 
 	test -n "$(filter-out true,${doTags})" || (							\
 		echo Tagging submodules...;										\
-		cd ${mwDir};													\
+		cd ${mwDir}/${relBranch};										\
 		${GIT} submodule -q	foreach										\
 			git tag -a ${releaseVer} -m ${releaseTagMsg};				\
 		echo Tagging core...;											\
@@ -129,7 +140,7 @@ maybeSubmodules=$(if $(filter-out false,${fetchSubmodules}),			\
 removeTag: verifyReleaseGiven
 	${GIT} fetch ${maybeSubmodules}
 	(																	\
-		cd ${mwDir};													\
+		cd ${mwDir}/${relBranch};													\
 		${GIT} submodule foreach										\
 			'git tag -d ${releaseVer} ${force}';						\
 	)
@@ -142,21 +153,20 @@ clone:
 		git clone ${maybeSubmodules} -b ${branch} ${repo}				\
 			${cloneDir}													\
 	) && (																\
+		echo ${indent}"Updating ${repo} in ${cloneDir}";				\
 		cd ${cloneDir};													\
 		git fetch;														\
-		export branches=\|`git branch | sed 's,$$,|,'`					\
-		echo $branches | fgrep -q '|  ${branch}|' || (					\
+		export branches=\|`git branch | sed 's,$$,|,'`;					\
+		echo $$branches | fgrep -q '|  ${branch}|' || (					\
 			git checkout ${branch}										\
 		) && (															\
-			echo $branches | fgrep -q '|* ${branch}|' || (				\
+			echo $$branches | fgrep -q '|* ${branch}|' || (				\
 				git checkout ${branch};									\
 				git pull												\
 			) && (														\
 				git pull												\
 			)															\
 		);																\
-		echo ${indent}"Updating ${repo} in ${cloneDir}";				\
-		git fetch ${maybeSubmodules}									\
 	)
 
 ${mwDir}/${relBranch}:
@@ -193,7 +203,7 @@ verifyTag: verifyReleaseGiven
 		)																\
 	)
 	(																	\
-		cd ${mwDir};													\
+		cd ${mwDir}/${relBranch};													\
 		${GIT} submodule foreach
 			'git fetch && git verify-tag ${releaseVer} || (				\
 				echo -n Could not verify signature on;					\
@@ -229,7 +239,8 @@ verifyRevisionExists: ${mwDir}/${relBranch}
 verifyTagNotExist: verifyReleaseGiven
 	${MAKE} clone cloneDir=${mwDir}/master repo=${mwGit}				\
 		branch=${relBranch}
-	test -n "$(filter-out true,${doTags})" -o -z "`cd ${mwDir};			\
+	test -n "$(filter-out true,${doTags})" -o -z						\
+		"`cd ${mwDir}/${relBranch};										\
 		${GIT} log -1 --oneline ${releaseVer} 2> /dev/null`" || (		\
 			echo ${indent}"Release tag already set!";					\
 			echo; exit 1												\
@@ -238,10 +249,10 @@ verifyTagNotExist: verifyReleaseGiven
 verifyPreviousVersion:
 
 verifyWgVersion:
-	${GIT} grep -q "\$$wgVersion = \'${releaseVer}\'" -- ${defSet} || (	\
-		echo ${indent}"\$$wgVersion is not set to"						\
+	${GIT} grep -q '$$wgVersion = '\'${releaseVer}\' -- ${defSet} || (	\
+		echo ${indent}'$$wgVersion is not set to'						\
 			"${releaseVer} in ${defSet}!";								\
-		${GIT} grep "\$$wgVersion = \'" -- ${defSet};					\
+		${GIT} grep '$$wgVersion = ' -- ${defSet};						\
 		exit 2															\
 	)
 
@@ -263,9 +274,11 @@ git-archive-all:
 
 # Test docker creation and use
 self-test:
+	sudo rm -f src/out-*
 	docker build -t mw-ab  -f ${mkfile_dir}/Dockerfile ${mkfile_dir}
 	docker run --volume ${mkfile_dir}/src:/src -e						\
 		GNUPGHOME=/src/.gpg mw-ab										\
 		explain="make args after (and including) this"					\
-		tarball VERBOSE=${VERBOSE} doTags=false tarball					\
-		releaseVer=$(if $(subst ---,,${releaseVer}),${releaseVer},1.32.0)
+		tarball VERBOSE=${VERBOSE} doTags=false							\
+		releaseVer=$(if $(subst ---,,${releaseVer}),${releaseVer},1.32.0) \
+		gitCommitEmail=${gitCommitEmail} gitCommitName=${gitCommitName}
