@@ -1,4 +1,6 @@
-# -*- tab-width: 4 -*-
+# -*- tab-width: 4; fill-column: 73 -*-
+# vi:shiftwidth=4 tabstop=4 textwidth=73
+
 # from https://stackoverflow.com/questions/18136918/how-to-get-current-relative-directory-of-your-makefile
 mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
 current_dir := $(patsubst %/,%,$(dir $(mkfile_path)))
@@ -85,30 +87,21 @@ verifyFile:
 	echo Successfully verified ${targetFile}
 	echo
 
-getMakeRelease: ${releaseDir}/.git
-${releaseDir}/.git:
-	test -d $@ || git clone ${gerritHead}/mediawiki/tools/release		\
-		${releaseDir}
+getMakeRelease: repo=${gerritHead}/mediawiki/tools/release
+getMakeRelease: cloneDir=${releaseDir}
+getMakeRelease: branch=master
+getMakeRelease: clone
 
 # Tag the checkout with the releaseVer.
 tag: verifyReleaseGiven verifyTagNotExist verifyPrivateKeyExists
 	${MAKE} ${mwDir}/${relBranch}
 
-	# Without the cd, this fails with "fatal: $$program_name cannot
-	# be used without a working tree." on git v2.11.0
-	echo ${indent}"Ensuring submodules are up to date ..."
-	(																	\
-		cd ${mwDir};													\
-		${GIT} submodule -q foreach										\
-			'git fetch && git checkout -q ${relBranch}'					\
-	)
-
+	cd ${mwDir}/${relBranch}
 	(																	\
 		export modules=`${GIT} status -s extensions skins |				\
 			awk '{print $$2}'`;											\
 		test -z "$$modules" || (										\
 			echo ${indent}"Committing submodules: $$modules";			\
-			cd ${mwDir};												\
 			${GIT} add $$modules;										\
 			${GIT} commit -m "Updating submodules for ${releaseVer}"	\
 				$$modules												\
@@ -142,14 +135,27 @@ removeTag: verifyReleaseGiven
 	)
 	${GIT} tag -d ${releaseVer}
 
+#
 clone:
-	test ! -d ${targetDir} || (											\
-		echo ${indent}"Cloning ${repo} to ${cloneDir} (${relBranch})";	\
-		git clone ${maybeSubmodules} -b ${relBranch} ${repo}			\
-			${cloneDir}												\
+	test -e ${cloneDir}/.git || (										\
+		echo ${indent}"Cloning ${repo} to $${cloneDir} (${branch})";	\
+		git clone ${maybeSubmodules} -b ${branch} ${repo}				\
+			${cloneDir}													\
 	) && (																\
-		echo ${indent}"Updating ${repo} in ${targetDir}";				\
-		cd ${targetDir};												\
+		cd ${cloneDir};													\
+		git fetch;														\
+		export branches=\|`git branch | sed 's,$$,|,'`					\
+		echo $branches | fgrep -q '|  ${branch}|' || (					\
+			git checkout ${branch}										\
+		) && (															\
+			echo $branches | fgrep -q '|* ${branch}|' || (				\
+				git checkout ${branch};									\
+				git pull												\
+			) && (														\
+				git pull												\
+			)															\
+		);																\
+		echo ${indent}"Updating ${repo} in ${cloneDir}";				\
 		git fetch ${maybeSubmodules}									\
 	)
 
@@ -158,8 +164,9 @@ ${mwDir}/${relBranch}:
 		echo ${indent}"No release branch given";						\
 		echo; exit 1													\
 	)
-	${MAKE} clone cloneDir=${mwDir}/master repo=${mwGit}
-	${MAKE} clone cloneDir=${mwDir}/${relBranch} repo=${mwDir}/master
+	${MAKE} clone cloneDir=${mwDir}/master repo=${mwGit} branch=master
+	${MAKE} clone cloneDir=${mwDir}/${relBranch} repo=${mwDir}/master	\
+		branch=${relBranch}
 
 # Show revision matching HEAD.
 showHeadRev: fetchSubmodules=false
@@ -220,7 +227,8 @@ verifyRevisionExists: ${mwDir}/${relBranch}
 	)
 
 verifyTagNotExist: verifyReleaseGiven
-	${MAKE} clone cloneDir=${mwDir}/master repo=${mwGit}
+	${MAKE} clone cloneDir=${mwDir}/master repo=${mwGit}				\
+		branch=${relBranch}
 	test -n "$(filter-out true,${doTags})" -o -z "`cd ${mwDir};			\
 		${GIT} log -1 --oneline ${releaseVer} 2> /dev/null`" || (		\
 			echo ${indent}"Release tag already set!";					\
@@ -245,7 +253,10 @@ installGitArchiveAll:
 		pip install git-archive-all
 
 git-archive-all:
-	pip3 install git-archive-all || (									\
-		echo Try \"sudo make git-archive-all\"							\
-		exit 2															\
+	python3 -c 'import git_archive_all' || (							\
+		echo ${indent}"Installing git-archive-all";						\
+		pip3 install $@ || (											\
+			echo Try \"sudo make git-archive-all\";						\
+			exit 2														\
+		)																\
 	)
