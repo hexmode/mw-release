@@ -1,5 +1,11 @@
 FROM alpine:3.9
-RUN apk add --no-cache make
 COPY Makefile /
 COPY *.mk /
+RUN apk add --no-cache	\
+        git		\
+        gnupg		\
+        make		\
+        python3		\
+        util-linux
+RUN pip3 install --upgrade pip
 ENTRYPOINT ["make"]

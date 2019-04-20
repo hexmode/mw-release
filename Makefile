@@ -4,6 +4,7 @@ mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
 current_dir := $(patsubst %/,%,$(dir $(mkfile_path)))
 include ${current_dir}/help.mk
 include ${current_dir}/config.mk
+include ${current_dir}/gpg.mk
 
 # Checkout, tag, and build a tarball
 tarball: tag doTarball
