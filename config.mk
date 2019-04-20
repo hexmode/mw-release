@@ -100,6 +100,10 @@ export noSigOk
 doTags ?= true
 export doTags
 
+# Sign the release
+doSign ?= false
+export doSign
+
 #
 targetDir ?= ${workDir}/target
 export targetDir

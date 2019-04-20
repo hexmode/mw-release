@@ -6,6 +6,6 @@ RUN apk add --no-cache	\
         python3		\
         util-linux	\
 	wget
-RUN pip3 install --upgrade pip
+RUN pip3 install --upgrade pip requests
 COPY Makefile *.mk /
 ENTRYPOINT ["make"]

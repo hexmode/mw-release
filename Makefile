@@ -20,7 +20,8 @@ doTarball: verifyReleaseGiven verifyPreviousVersion getMakeRelease		\
 	)
 
 	mkdir -p ${targetDir}
-	${makeRelease} --previous ${prevReleaseVer} --sign					\
+	${makeRelease} --previous ${prevReleaseVer}							\
+		$(if $(subst false,,${doSign}),--sign)							\
 		--output_dir ${targetDir} ${mwDir}/${relBranch} ${releaseVer}
 
 #
@@ -279,6 +280,7 @@ self-test:
 	docker run --volume ${mkfile_dir}/src:/src -e						\
 		GNUPGHOME=/src/.gpg mw-ab										\
 		explain="make args after (and including) this"					\
-		tarball VERBOSE=${VERBOSE} doTags=false							\
-		releaseVer=$(if $(subst ---,,${releaseVer}),${releaseVer},1.32.0) \
-		gitCommitEmail=${gitCommitEmail} gitCommitName=${gitCommitName}
+		tarball															\
+		gitCommitEmail=${gitCommitEmail} gitCommitName=${gitCommitName} \
+		doSign=${doSign}  VERBOSE=${VERBOSE} doTags=false				\
+		releaseVer=$(if $(subst ---,,${releaseVer}),${releaseVer},1.32.0)
