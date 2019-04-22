@@ -94,7 +94,13 @@ getMakeRelease: cloneDir=${releaseDir}
 getMakeRelease: branch=master
 getMakeRelease: clone
 
-commitId:
+commitCheck:
+	test -n "${gitCommitEmail}" ||									\
+		( echo ${indent}"Set gitCommitEmail!"; exit 2 )
+	test -n "${gitCommitName}" ||									\
+		( echo ${indent}"Set gitCommitName!"; exit 2 )
+
+commitId: commitCheck
 	git config --global --get user.email >/dev/null || (			\
 		test -n "${gitCommitEmail}" &&								\
 			git config --global --add user.email					\
@@ -272,7 +278,7 @@ git-archive-all:
 	)
 
 # Test docker creation and use
-self-test:
+self-test: commitCheck
 	sudo rm -f src/out-*
 	docker build -t mw-ab -f ${mkfileDir}/Dockerfile ${mkfileDir}
 	docker run --rm --volume ${mkfileDir}/src:/src -e				\

@@ -37,13 +37,12 @@ majorReleaseVer=$(strip $(if $(filter-out ---,${releaseVer}),		\
 	echo ${releaseVer} | cut -d . -f 2),---))
 
 thisMinorVer=$(strip $(if $(filter-out ---,${releaseVer}),			\
-	$(shell echo ${releaseVer} | cut -d . -f 3)))
-
+	$(shell echo ${releaseVer} | cut -d . -f 3),---))
 prevMajorVer=${majorReleaseVer}
-ifneq "${thisMinorVer}" "0"
-	prevMinorVer=$(shell (echo ${thisMinorVer}; echo 1 - p) | dc )
-else
+ifeq "${thisMinorVer}" "---"
 	prevMinorVer=-1
+else
+	prevMinorVer=$(shell (echo ${thisMinorVer}; echo 1 - p) | dc )
 endif
 
 # The version to diff against
