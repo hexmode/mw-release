@@ -12,8 +12,8 @@ include ${mkfileDir}/gpg.mk
 tarball: tag doTarball
 
 # Just build tarball with already checkedout code
-doTarball: verifyReleaseGiven verifyPreviousVersion getMakeRelease	\
-		getPreviousTarball git-archive-all verifyWgVersion
+doTarball: verifyReleaseGiven getMakeRelease getPreviousTarball		\
+		git-archive-all verifyWgVersion
 	test -f ${mwDir}/${relBranch}/.git/config || (					\
 		echo ${indent}"Check out repo first: make tarball";			\
 		echo; exit 1												\
@@ -74,6 +74,7 @@ downloadFile:
 		${WGET} ${releasesUrl}${majorReleaseVer}/${targetFile}		\
 			-O ${targetDir}/${targetFile} || (						\
 			echo; echo Could not download ${targetFile}; 			\
+			rm ${targetDir}/${targetFile};							\
 			echo; exit 1											\
 		) || exit 1;												\
 		echo														\
@@ -81,12 +82,12 @@ downloadFile:
 
 
 verifyFile:
-	gpg --batch --verify ${targetDir}/${targetFile}.sig				\
-		${targetDir}/${targetFile} || (								\
-		echo Could not verify ${targetFile};						\
-		echo; exit 1												\
-	)
-	echo Successfully verified ${targetFile}
+	gpg --batch --verify ${targetDir}/${targetFile}.sig			\
+		${targetDir}/${targetFile} || (							\
+		echo Could not verify ${targetFile};					\
+		echo; exit 1											\
+	);															\
+	echo Successfully verified ${targetFile};					\
 	echo
 
 getMakeRelease: repo=${gerritHead}/mediawiki/tools/release
@@ -166,17 +167,11 @@ clone:
 		echo ${indent}"Updating ${repo} in ${cloneDir}";			\
 		cd ${cloneDir};												\
 		git fetch;													\
-		export branches=\|`git branch | sed 's,$$,|,'`;				\
-		echo $$branches | fgrep -q '|  ${branch}|' || (				\
-			git checkout ${branch}									\
-		) && (														\
-			echo $$branches | fgrep -q '|* ${branch}|' || (			\
-				git checkout ${branch};								\
-				git pull											\
-			) && (													\
-				git pull											\
-			)														\
+		export branches="`git branch | sed "s,$$,|,"`";				\
+		echo "$$branches" | fgrep -q '* ${branch}|' || (			\
+			echo git checkout ${branch}								\
 		);															\
+		git pull ${maybeSubmodules}									\
 	)
 
 ${mwDir}/${relBranch}:
@@ -257,14 +252,15 @@ verifyTagNotExist: verifyReleaseGiven
 			echo; exit 1											\
 	)
 
-verifyPreviousVersion:
-
 verifyWgVersion:
-	${GIT} grep -q 
+	${GIT} grep -q 													\
 		'$$wgVersion = '\'${releaseVer}\' -- ${defSet} || (			\
 			echo ${indent}'$$wgVersion is not set to'				\
 			"${releaseVer} in ${defSet}!";							\
 			${GIT} grep '$$wgVersion = ' -- ${defSet};				\
+			echo;													\
+			echo "Try 'make setVersion releaseVer=${releaseVer}'"	\
+			echo; echo;												\
 			exit 2													\
 		)
 
@@ -291,4 +287,4 @@ self-test: commitCheck
 		VERBOSE=${VERBOSE}											\
 		doTags=false												\
 		releaseVer=$(if												\
-			$(subst ---,,${releaseVer}),${releaseVer},1.32.0)
+			$(subst ---,,${releaseVer}),${releaseVer},1.32.1)
