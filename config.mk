@@ -69,6 +69,11 @@ releaseTagMsg ?= $(strip $(if $(filter-out ---,${releaseVer}),				\
 	"MediaWiki v${releaseVer}",---))
 export releaseTagMsg
 
+# The message to add making a release
+releaseMsg ?= $(strip $(if $(filter-out ---,${releaseVer}),					\
+	"This is MediaWiki v${releaseVer}",---))
+export releaseMsg
+
 # Revision to tag or branch on
 revision ?= HEAD
 export revision

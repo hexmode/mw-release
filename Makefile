@@ -115,8 +115,7 @@ commitId: commitCheck
 	)
 
 # Tag the checkout with the releaseVer.
-tag: verifyReleaseGiven verifyTagNotExist verifyPrivateKeyExists			\
-		commitId
+tag: verifyReleaseGiven verifyTagNotExist verifyPrivateKeyExists commitId
 	${MAKE} ${mwDir}/${relBranch}
 
 	(																		\
@@ -136,11 +135,11 @@ tag: verifyReleaseGiven verifyTagNotExist verifyPrivateKeyExists			\
 	)
 
 	test -n "$(filter-out true,${doTags})" || (								\
-		echo Tagging submodules...;											\
-		cd ${mwDir}/${relBranch};											\
+		echo Tagging submodules... &&										\
+		cd ${mwDir}/${relBranch} &&											\
 		${GIT} submodule -q	foreach											\
-			git tag -a ${releaseVer} -m ${releaseTagMsg};					\
-		echo Tagging core...;												\
+			git tag -a ${releaseVer} -m ${releaseTagMsg} &&					\
+		echo Tagging core... &&												\
 		${GIT} tag -a ${releaseVer} -m ${releaseTagMsg}						\
 	)
 
@@ -276,8 +275,9 @@ git-archive-all:
 # Bump the version in DefaultSettings.php
 bumpVersion:
 	${GIT} grep -q 	'$$wgVersion = '\'${prevReleaseVer}\' -- ${defSet} && (	\
-		sed -i 's,^\($$wgVersion = '\''\)${prevReleaseVer},\1${releaseVer},'	\
-			${mwDir}/${relBranch}/${defSet}									\
+		sed -i 's,^\($$wgVersion = '\''\)${prevReleaseVer},\1${releaseVer},'\
+			${mwDir}/${relBranch}/${defSet} &&								\
+		${GIT} add ${defSet}												\
 	) || (																	\
 		echo;																\
 		echo '$@ will only work when the version is "${prevReleaseVer}"'	\
@@ -287,6 +287,30 @@ bumpVersion:
 		echo; echo;															\
 		exit 2																\
 	)
+
+checkOkToCommit:
+	test `${GIT} status --porcelain | wc -l` -eq 0 || (						\
+		${GIT} status --porcelain | awk '/^ M/ {print $$2}' |				\
+			xargs --no-run-if-empty ${GIT} add &&							\
+		${GIT} status --porcelain | awk '/^ M/ {print $$2}' | (				\
+			lines=`wc -l`;													\
+			test $$lines -eq 0 || (											\
+				echo "Could not automatically commit.  Please fix manually"	\
+					"before continuing.";									\
+				exit 2														\
+			)																\
+		)																	\
+	)
+	touch $@					# Also see post commit where this is rm'd
+
+commit: checkOkToCommit
+	${GIT} commit -m ${releaseMsg}
+	rm -f checkOkToCommit
+
+# Tag (and bump) source with this version
+tagBumpedSource:
+	${GIT} pull --recurse-submodules=yes
+	${MAKE} checkOkToCommit bumpVersion commit tag
 
 # Create the docker image that runs this
 createDocker:
