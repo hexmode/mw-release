@@ -13,16 +13,16 @@ help:
 	@ echo ''
 	@ echo '  Targets:'
 	@ echo ''
-	@ awk '/^#/{ comment = substr($$0,3) } comment					\
-		 && /^[a-zA-Z][a-zA-Z0-9_-]+ ?: *[^=]*$$/ {					\
-			 print "   ", $$1, comment								\
+	@ awk '/^#/{ comment = substr($$0,3) } comment							\
+		 && /^[a-zA-Z][a-zA-Z0-9_-]+ ?: *[^=]*$$/ {							\
+			 print "   ", $$1, comment										\
 		}' $(MAKEFILE_LIST) | column -t -s ':' | sort
 	@ echo ''
 	@ echo '  Flags:'
 	@ echo ''
-	@ awk '/^#/{ comment = substr($$0,3) } comment					\
-		 && /^[a-zA-Z][a-zA-Z0-9_-]+ ?\?= *([^=].*)$$/ {			\
-			print "   ", $$1, $$2, comment, 						\
-			"(Default: " ENVIRON[$$1] ")"							\
+	@ awk '/^#/{ comment = substr($$0,3) } comment							\
+		 && /^[a-zA-Z][a-zA-Z0-9_-]+ ?\?= *([^=].*)$$/ {					\
+			print "   ", $$1, $$2, comment, 								\
+			"(Default: " ENVIRON[$$1] ")"									\
 		}' $(MAKEFILE_LIST) | column -t -s '?=' | sort
 	@ echo ''

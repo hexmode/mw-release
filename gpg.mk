@@ -3,6 +3,7 @@
 
 keyUrl=https://www.mediawiki.org/keys/keys.txt
 
+# Fetch PGP keys from keyUrl
 .PHONY:
 fetchKeys:
 	mkdir -p $$GNUPGHOME
