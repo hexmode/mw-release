@@ -1,5 +1,5 @@
-#-*-tab-width: 4; fill-column: 68; whitespace-line-column: 69 -*-
-# vi:shiftwidth=4 tabstop=4 textwidth=68
+#-*-tab-width: 4; fill-column: 76; whitespace-line-column: 77 -*-
+# vi:shiftwidth=4 tabstop=4 textwidth=76
 
 # from https://stackoverflow.com/questions/18136918/how-to-get-current-relative-directory-of-your-makefile
 mkfilePath := $(abspath $(lastword $(MAKEFILE_LIST)))
@@ -7,6 +7,10 @@ mkfileDir := $(patsubst %/,%,$(dir $(mkfilePath)))
 include ${mkfileDir}/help.mk
 include ${mkfileDir}/config.mk
 include ${mkfileDir}/gpg.mk
+
+#
+getEnv:
+	env
 
 # Checkout, tag, and build a tarball
 tarball: tag doTarball
@@ -29,14 +33,8 @@ showPreviousRelease:
 	echo "${prevReleaseVer}"
 
 # Retreive all artifacts from the release server before releaseVer.
-getAllTarballs:
-	${MAKE} getPreviousTarball releaseVer=${prevReleaseVer} &&				\
-		${MAKE} getAllTarballs releaseVer=${prevReleaseVer}
-#
-getPreviousTarball:
-	# Fork another, or we get recursiveness
-	${MAKE} downloadTarball releaseVer=${prevReleaseVer}					\
-		majorReleaseVer=${prevMajorVer}
+getAllTarballs: downloadTarball
+	${MAKE} getAllTarballs releaseVer=${prevReleaseVer}
 
 # Download all artifacts for a release.
 downloadTarball:
@@ -45,7 +43,7 @@ downloadTarball:
 		echo; exit 1														\
 	)
 
-	${MAKE} downloadAndVerifyFile 											\
+	${MAKE} downloadAndVerifyFile											\
 		targetFile=mediawiki-core-${releaseVer}.tar.gz || ${doNotFail}
 	${MAKE} downloadAndVerifyFile 											\
 		targetFile=mediawiki-${releaseVer}.tar.gz || ${doNotFail}
@@ -56,14 +54,11 @@ downloadTarball:
 
 #
 downloadAndVerifyFile:
-	${MAKE} ${targetDir}/${targetFile}
-	test ! -f ${targetDir}/${targetFile} ||									\
-		${MAKE} downloadFile targetFile=${targetFile}.sig ||				\
-			${noSigOk}
-	test ! -f ${targetDir}/${targetFile} -o									\
-		! -f ${targetDir}/${targetFile}.sig ||								\
-		${MAKE} verifyFile targetFile=${targetFile}
-
+	test -f ${targetDir}/${targetFile} -a ${targetDir}/${targetFile}.sig ||(	\
+		${MAKE} downloadFile targetFile=${targetFile} &&					\
+		${MAKE} downloadFile targetFile=${targetFile}.sig					\
+	)
+	${MAKE} verifyFile targetFile=${targetFile}
 
 ${targetDir}/${targetFile}: downloadFile
 downloadFile:
@@ -76,19 +71,12 @@ downloadFile:
 			echo; echo Could not download ${targetFile}; 					\
 			rm ${targetDir}/${targetFile};									\
 			echo; exit 1													\
-		) || exit 1;														\
-		echo																\
+		)																	\
 	)
 
-
 verifyFile:
-	gpg --batch --verify ${targetDir}/${targetFile}.sig					\
-		${targetDir}/${targetFile} || (									\
-		echo Could not verify ${targetFile};							\
-		echo; exit 1													\
-	);																	\
-	echo Successfully verified ${targetFile};							\
-	echo
+	gpg --batch --verify ${targetDir}/${targetFile}.sig						\
+		${targetDir}/${targetFile}
 
 getMakeRelease: repo=${gerritHead}/mediawiki/tools/release
 getMakeRelease: cloneDir=${releaseDir}
@@ -115,7 +103,7 @@ commitId: commitCheck
 	)
 
 # Tag the checkout with the releaseVer.
-tag: verifyReleaseGiven verifyTagNotExist verifyPrivateKeyExists commitId
+tag: verifyReleaseGiven verifyPrivateKeyExists commitId
 	${MAKE} ${mwDir}/${relBranch}
 
 	(																		\
@@ -210,7 +198,7 @@ verifyTag: verifyReleaseGiven
 	)
 	(																		\
 		cd ${mwDir}/${relBranch};											\
-		${GIT} submodule foreach
+		${GIT} submodule foreach											\
 			'git fetch && git verify-tag ${releaseVer} || (					\
 				echo -n Could not verify signature on;						\
 				echo ${indent}" ${releaseVer} for $$name";					\
@@ -240,16 +228,6 @@ verifyRevisionExists: ${mwDir}/${relBranch}
 	$(if $(filter-out 0,$(shell												\
 			${GIT} ls-tree ${revision} | wc -l								\
 	)), exit 0, exit 1)
-
-verifyTagNotExist: verifyReleaseGiven
-	${MAKE} clone cloneDir=${mwDir}/master repo=${mwGit}					\
-		branch=${relBranch}
-	test -n "$(filter-out true,${doTags})" -o -z							\
-		"`cd ${mwDir}/${relBranch};											\
-		${GIT} log -1 --oneline ${releaseVer} 2> /dev/null`" || (			\
-			echo ${indent}"Release tag already set!";						\
-			echo; exit 1													\
-	)
 
 verifyWgVersion:
 	${GIT} grep -q 															\
@@ -288,6 +266,7 @@ bumpVersion:
 		exit 2																\
 	)
 
+#
 checkOkToCommit:
 	test `${GIT} status --porcelain | wc -l` -eq 0 || (						\
 		${GIT} status --porcelain | awk '/^ M/ {print $$2}' |				\

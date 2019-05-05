@@ -1,5 +1,5 @@
-#-*-tab-width: 4; fill-column: 68; whitespace-line-column: 69 -*-
-# vi:shiftwidth=4 tabstop=4 textwidth=68
+#-*-tab-width: 4; fill-column: 76; whitespace-line-column: 77 -*-
+# vi:shiftwidth=4 tabstop=4 textwidth=76
 ifndef VERBOSE
 .SILENT: # Don't print commands
 phpOpts=-d error_reporting=30711
@@ -8,11 +8,22 @@ wgetQuiet=-q
 maintQuiet=-q
 endif
 
+# Working directory
+workDir ?= $(shell test -w /src && echo /src || echo `pwd`/src)
+export workDir
+
+#
+HOME=${workDir}
+export HOME
+
+GNUPGHOME=${workDir}/gpg
+export GNUPGHOME
+
 # Following are variables for commands that need args
 GIT=git --no-pager --work-tree=${mwDir}/${relBranch}						\
 		--git-dir=${mwDir}/${relBranch}/.git
 MAKE=make -f $(abspath $(firstword ${MAKEFILE_LIST})) indent="${indent}\> "	\
-	prevReleaseVer=${prevReleaseVer}
+	releaseVer=${releaseVer}
 WGET=wget ${wgetQuiet}
 
 thisDir=$(patsubst %/,%,$(dir $(abspath$(lastword ${MAKEFILE_LIST}))))
@@ -52,7 +63,7 @@ ifeq "${thisMinorVer}${prevMinorVer}" "0-1"
 	# previous major version releases, sorting them, and getting
 	# the last one.  Startup takes a few ms longer.
 	prevMajorVer=$(strip $(if $(filter-out ---,${releaseVer}),				\
-		$(shell echo ${releaseVer} | cut -d . -f 1).$(shell					\
+		$(shell echo ${releaseVer} | cut -d . -f 1).$(shell				\
 			echo ${releaseVer} | (cut -d . -f 2; echo 1 - p ) | dc ),---))
 	prevReleaseVer=${prevMajorVer}.$(shell									\
 			test -f ${workDir}/out-${prevMajorVer} ||						\
@@ -70,7 +81,7 @@ releaseTagMsg ?= $(strip $(if $(filter-out ---,${releaseVer}),				\
 export releaseTagMsg
 
 # The message to add making a release
-releaseMsg ?= $(strip $(if $(filter-out ---,${releaseVer}),					\
+releaseMsg ?= $(strip $(if $(filter-out ---,${releaseVer}),				\
 	"This is MediaWiki v${releaseVer}",---))
 export releaseMsg
 
@@ -84,17 +95,14 @@ relBranch ?= $(strip $(if $(filter-out ---,${releaseVer}),					\
 	echo ${releaseVer} | cut -d . -f 2),---))
 export relBranch
 
-# Working directory
-workDir ?= /src
-export workDir
-
 # MediaWiki checkout directory
 mwDir=${workDir}/mediawiki
 export mwDir
 
 # KeyID to use
-keyId ?= $(shell gpgconf --list-options gpg | 								\
-	awk -F: '$$1 == "default-key" {print $$10}' | sed s,^.,,)
+keyId ?= $(shell git config --get user.signingkey || (						\
+	gpgconf --list-options gpg |											\
+	awk -F: '$$1 == "default-key" {print $$10}' | sed s,^.,,) )
 export keyId
 
 # Continue without signature after downloading
@@ -122,9 +130,14 @@ makeRelease=${releaseDir}/make-release/makerelease2.py
 
 defSet=includes/DefaultSettings.php
 
-GNUPGHOME=${workDir}/.gpg
-export GNUPGHOME
-
 # The name of the Docker image
 imageName ?= mw-ab
 export imageName
+
+# The email address to use for the committer
+gitCommitEmail ?= $(shell git config --get user.email)
+export gitCommitEmail
+
+# The name to use for the committer
+gitCommitName ?= $(shell git config --get user.name)
+export gitCommitName
