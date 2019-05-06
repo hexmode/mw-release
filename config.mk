@@ -121,6 +121,9 @@ export doSign
 targetDir ?= ${workDir}/target
 export targetDir
 
+extractDir ?= ${workDir}/extract
+export extractDir
+
 mwGit ?= ${gerritHead}/mediawiki/core
 export mwGit
 
@@ -141,3 +144,5 @@ export gitCommitEmail
 # The name to use for the committer
 gitCommitName ?= $(shell git config --get user.name)
 export gitCommitName
+
+getUnknownKeys ?= false

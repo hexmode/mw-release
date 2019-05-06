@@ -58,7 +58,7 @@ downloadAndVerifyFile:
 		${MAKE} downloadFile targetFile=${targetFile} &&					\
 		${MAKE} downloadFile targetFile=${targetFile}.sig					\
 	)
-	${MAKE} verifyFile targetFile=${targetFile}
+	${MAKE} verifyFile sigFile=${targetDir}/${targetFile}.sig
 
 ${targetDir}/${targetFile}: downloadFile
 downloadFile:
@@ -75,8 +75,25 @@ downloadFile:
 	)
 
 verifyFile:
-	gpg --batch --verify ${targetDir}/${targetFile}.sig						\
-		${targetDir}/${targetFile}
+	test -n "${sigFile}" -a -f ${sigFile} || (								\
+		echo "The sigFile (${sigFile}) does not exist.";					\
+		exit 2																\
+	)
+	(																		\
+		verify=`gpg --batch --verify ${sigFile} $(basename ${sigFile}) 2>&1`;\
+		echo $$verify | grep -q 'Good signature'							\
+			&& gpg --batch --verify ${sigFile} $(basename ${sigFile})		\
+			|| (															\
+				test "${getUnknownKeys}" = "false"							\
+				&& echo "Cannot verify file because we don't have the key"	\
+				|| (														\
+					key=`echo $$verify |									\
+						sed 's,.*gpg: using [^ ]* key \([^ ]*\).*,\1,'`;	\
+					gpg --recv $$key &&										\
+					gpg --batch --verify ${sigFile} $(basename ${sigFile})	\
+				)															\
+			)																\
+	)
 
 getMakeRelease: repo=${gerritHead}/mediawiki/tools/release
 getMakeRelease: cloneDir=${releaseDir}
@@ -285,6 +302,31 @@ checkOkToCommit:
 commit: checkOkToCommit
 	${GIT} commit -m ${releaseMsg}
 	rm -f checkOkToCommit
+
+verifyExists:
+	test -f ${targetDir}/${targetFile} || (									\
+		echo "${targetFile} does not exist";								\
+		exit 2																\
+	)
+
+	${MAKE} verifyFile sigFile=${targetDir}/${targetFile}.sig
+
+diffExists:
+	${MAKE} verifyExists targetFile=mediawiki-${releaseVer}.patch.gz
+
+releaseExists:
+	${MAKE} verifyExists targetFile=mediawiki-${releaseVer}.tar.gz
+
+extractRelease: releaseExists
+	mkdir -p ${extractDir}
+	tar -C ${extractDir} -xzf mediawiki-${releaseVer}.tar.gz
+
+# Check diff for a given releasea
+checkDiff: diffExists extractRelease extractPrevRelease
+	echo ${indent}Applying diff
+	cd ${extractDir}/${prevReleaseVer} &&									\
+		zcat ${targetDir}/mediawiki-${releaseVer}.patch.gz | patch -p1
+	diff -Nur ${extractDir}/${releaseVer} ${extractDir}/${releaseVer} > this-diff.diff
 
 # Tag (and bump) source with this version
 tagBumpedSource:
