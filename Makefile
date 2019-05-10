@@ -54,7 +54,7 @@ downloadTarball:
 
 #
 downloadAndVerifyFile:
-	test -f ${targetDir}/${targetFile} -a ${targetDir}/${targetFile}.sig ||(	\
+	test -f ${targetDir}/${targetFile} -a ${targetDir}/${targetFile}.sig ||(\
 		${MAKE} downloadFile targetFile=${targetFile} &&					\
 		${MAKE} downloadFile targetFile=${targetFile}.sig					\
 	)
@@ -74,27 +74,6 @@ downloadFile:
 		)																	\
 	)
 
-verifyFile:
-	test -n "${sigFile}" -a -f ${sigFile} || (								\
-		echo "The sigFile (${sigFile}) does not exist.";					\
-		exit 2																\
-	)
-	(																		\
-		verify=`gpg --batch --verify ${sigFile} $(basename ${sigFile}) 2>&1`;\
-		echo $$verify | grep -q 'Good signature'							\
-			&& gpg --batch --verify ${sigFile} $(basename ${sigFile})		\
-			|| (															\
-				test "${getUnknownKeys}" = "false"							\
-				&& echo "Cannot verify file because we don't have the key"	\
-				|| (														\
-					key=`echo $$verify |									\
-						sed 's,.*gpg: using [^ ]* key \([^ ]*\).*,\1,'`;	\
-					gpg --recv $$key &&										\
-					gpg --batch --verify ${sigFile} $(basename ${sigFile})	\
-				)															\
-			)																\
-	)
-
 getMakeRelease: repo=${gerritHead}/mediawiki/tools/release
 getMakeRelease: cloneDir=${releaseDir}
 getMakeRelease: branch=master
@@ -106,21 +85,8 @@ commitCheck:
 	test -n "${gitCommitName}" ||											\
 		( echo ${indent}"Set gitCommitName!"; exit 2 )
 
-commitId: commitCheck
-	git config --global --get user.email >/dev/null || (					\
-		test -n "${gitCommitEmail}" &&										\
-			git config --global --add user.email							\
-				${gitCommitEmail} ||										\
-			( echo ${indent}"Set gitCommitEmail!"; exit 2 )					\
-	)
-	git config --global --get user.name >/dev/null || (						\
-		test -n "${gitCommitName}" &&										\
-			git config --global --add user.name ${gitCommitName} || 		\
-			( echo ${indent}"Set gitCommitName!"; exit 2 )					\
-	)
-
 # Tag the checkout with the releaseVer.
-tag: verifyReleaseGiven verifyPrivateKeyExists commitId
+tag: verifyReleaseGiven verifySecretKeyExists commitCheck
 	${MAKE} ${mwDir}/${relBranch}
 
 	(																		\
@@ -193,10 +159,6 @@ showHeadRev: fetchSubmodules=false
 showHeadRev: ${mwDir}/${relBranch}
 	${GIT} log -1 --oneline
 
-# Show information about the key used for signing.
-showKeyInfo:
-	gpg --list-key ${keyId}
-
 # Make sure the releaseVer tag is signed correctly.
 verifyTag: verifyReleaseGiven
 	${MAKE} ${mwDir}/${relBranch}
@@ -229,17 +191,6 @@ verifyReleaseGiven:
 		echo ${indent}"Please specify releaseVer!";							\
 		echo; exit 1														\
 	)
-
-verifyPrivateKeyExists:
-	test -n "{$keyId}" || (													\
-		echo ${indent}"Please specify a keyId!";							\
-		echo; exit 1;														\
-	)
-	gpg --list-secret-keys ${keyId} > /dev/null 2>&1 || (					\
-		echo ${indent}"No private key matching '${keyId}'"; 				\
-		echo; exit 1														\
-	)
-
 
 verifyRevisionExists: ${mwDir}/${relBranch}
 	$(if $(filter-out 0,$(shell												\
@@ -326,7 +277,8 @@ checkDiff: diffExists extractRelease extractPrevRelease
 	echo ${indent}Applying diff
 	cd ${extractDir}/${prevReleaseVer} &&									\
 		zcat ${targetDir}/mediawiki-${releaseVer}.patch.gz | patch -p1
-	diff -Nur ${extractDir}/${releaseVer} ${extractDir}/${releaseVer} > this-diff.diff
+	diff -Nur ${extractDir}/${releaseVer} ${extractDir}/${releaseVer}		\
+		> this-diff.diff
 
 # Tag (and bump) source with this version
 tagBumpedSource:

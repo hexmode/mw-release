@@ -13,11 +13,9 @@ workDir ?= $(shell test -w /src && echo /src || echo `pwd`/src)
 export workDir
 
 #
+oldHOME=$(shell getent passwd $$USER | cut -d: -f6)
 HOME=${workDir}
 export HOME
-
-GNUPGHOME=${workDir}/gpg
-export GNUPGHOME
 
 # Following are variables for commands that need args
 GIT=git --no-pager --work-tree=${mwDir}/${relBranch}						\
@@ -99,23 +97,9 @@ export relBranch
 mwDir=${workDir}/mediawiki
 export mwDir
 
-# KeyID to use
-keyId ?= $(shell git config --get user.signingkey || (						\
-	gpgconf --list-options gpg |											\
-	awk -F: '$$1 == "default-key" {print $$10}' | sed s,^.,,) )
-export keyId
-
-# Continue without signature after downloading
-noSigOk ?= false
-export noSigOk
-
 # Check for tags to determine if build has been done
 doTags ?= true
 export doTags
-
-# Sign the release
-doSign ?= false
-export doSign
 
 #
 targetDir ?= ${workDir}/target
@@ -127,7 +111,6 @@ export extractDir
 mwGit ?= ${gerritHead}/mediawiki/core
 export mwGit
 
-doNotFail=$(if $(filter-out true,${noSigOk}),true,false)
 releaseDir=${workDir}/release
 makeRelease=${releaseDir}/make-release/makerelease2.py
 
@@ -138,11 +121,13 @@ imageName ?= mw-ab
 export imageName
 
 # The email address to use for the committer
-gitCommitEmail ?= $(shell git config --get user.email)
+gitCommitEmail ?= $(shell git config --get user.email ||					\
+	git config --global --get user.email)
 export gitCommitEmail
 
 # The name to use for the committer
-gitCommitName ?= $(shell git config --get user.name)
+gitCommitName ?= $(shell git config --get user.name ||					\
+	git config --global --get user.name)
 export gitCommitName
 
 getUnknownKeys ?= false
