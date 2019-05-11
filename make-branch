@@ -23,29 +23,37 @@ namespace Wikimedia\Release;
 
 require __DIR__ . '/vendor/autoload.php';
 
-use splitbrain\phpcli\CLI;
+use splitbrain\phpcli\PSR3CLI;
 use splitbrain\phpcli\Options;
 use Wikimedia\Release\Branch;
 
-class MakeBranch extends CLI {
+class MakeBranch extends PSR3CLI {
 
 	protected function setup( Options $opt ) {
 		$opt->setHelp( "Create Branches" );
+		$opt->setCommandHelp( "Specify one of the following branch styles:" );
 		$opt->registerCommand( 'wmf', 'Create a WMF Branch' );
+		$opt->setCompactHelp( );
 
-		$opt->registerOption( 'new', 'New branch name.', 'n', true );
+		$opt->registerOption( 'new', 'New branch name.', 'n', 'name' );
 		$opt->registerOption(
-			'old', 'Old branch name. (default: master)', 'o', true
+			'old', 'Old branch name. (default: master)', 'o', 'name'
 		);
 
 		$opt->registerOption( 'dry-run', 'Do everything but push.', 'd' );
-		$opt->registerOption( 'path', 'Path on Local disk from which to '
-							 . 'branch mediawiki-core.', 'p', true );
-		$opt->registerOption( 'continue-from', 'Extension from which to '
-							 . 'resume branching. Mainly useful in the case'
-							 . 'where initial branching fails.', 'c', true );
-		$opt->registerOption( 'keep-tmp', 'Whether to keep files in /tmp '
-							 . 'after finishing. Default is to remove', 'k' );
+		$opt->registerOption(
+			'path', 'Path on Local disk from which to branch mediawiki-core.',
+			'p', 'path'
+		);
+		$opt->registerOption(
+			'continue-from', 'Extension from which to resume branching. Mainly '
+			. 'useful in the case where initial branching fails.', 'c',
+			'ext'
+		);
+		$opt->registerOption(
+			'keep-tmp', 'Whether to keep files in /tmp after finishing. '
+			. 'Default is to remove', 'k'
+		);
 	}
 
 	public function die( $msg, $showHelp = true ) {
@@ -97,7 +105,7 @@ class MakeBranch extends CLI {
 		}
 
 		$this->check();
-		$branch = Branch::getBrancher( $opt->getCmd(), $opt );
+		$branch = Branch::getBrancher( $opt->getCmd(), $opt, $this );
 		$branch->initialize();
 		$branch->execute();
 	}

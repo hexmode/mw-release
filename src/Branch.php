@@ -20,6 +20,7 @@
 namespace Wikimedia\Release;
 
 use splitbrain\phpcli\Options;
+use Psr\Log\LoggerInterface;
 use Exception;
 
 class Branch {
@@ -35,7 +36,11 @@ class Branch {
 	 * @param string $type of brancher to create
 	 * @param Options $opt the user gave
 	 */
-	static function getBrancher( string $type, Options $opt ) {
+	static function getBrancher(
+		string $type,
+		Options $opt,
+		LoggerInterface $logger
+	) {
 		$class = __CLASS__ . "\\" . ucFirst( $type );
 		if ( !class_exists( $class ) ) {
 			throw new Exception( "$type is not a proper brancher!" );
@@ -46,7 +51,11 @@ class Branch {
 		$branch->oldVersion = $opt->getOpt( "old" ) ?: 'master';
 		$branch->branchPrefix = $opt->getOpt( 'branch-prefix' );
 		$branch->clonePath = $opt->getOpt( 'path' );
+		if ( $opt->getOpt( 'dry-run' ) ) {
+			$branch->dryRun = true;
+		}
 		$branch->alreadyBranched = [];
+		$branch->logger = $logger;
 
 		return $branch;
 	}
@@ -59,13 +68,16 @@ class Branch {
 		list( $arg0 ) = get_included_files();
 		$dir = dirname( $arg0 );
 
-		if ( !is_readable( $dir . '/default.conf' ) ) {
-			throw new Exception( "Can't read default.conf!" );
+		$repoPath = 'https://gerrit.wikimedia.org/r/mediawiki';
+		$branchPrefix = 'wmf/';
+		$dryRun = false; // Don't actually push anything
+		$noisy = false; // Output git commands
+		if ( is_readable( $dir . '/default.conf' ) ) {
+			require $dir . '/default.conf';
 		}
-		require $dir . '/default.conf';
 		$this->repoPath = $repoPath;
 		$this->branchPrefix = $branchPrefix;
-		$this->dryRun = $dryRun;
+		$this->dryRun = isset( $this->dryRun ) ?: $dryRun;
 		$this->noisy = $noisy;
 		$this->clonePath = $this->clonePath ?: "{$this->repoPath}/core";
 
@@ -134,50 +146,49 @@ class Branch {
 
 	function runCmd( /*...*/ ) {
 		$args = func_get_args();
+		if ( is_array( $args[0] ) ) {
+			$args = $args[0];
+		}
 		if ( $this->noisy && in_array( "-q", $args ) ) {
 			$args = array_diff( $args, array( "-q" ) );
 		}
 		$encArgs = array_map( 'escapeshellarg', $args );
 		$cmd = implode( ' ', $encArgs );
+		$printCmd = implode( ' ', $args );
 
 		$attempts = 0;
 		do {
-			echo "$cmd\n";
+			$this->logger->info( $printCmd );
 			passthru( $cmd, $ret );
 
 			if ( !$ret ) {
 				// It worked!
 				return;
 			}
-			echo "sleeping for 5s\n";
+			$this->logger->info( "sleeping for 5s" );
 			sleep( 5 );
 		} while ( ++$attempts <= 5 );
-		$this->croak( $args[0] . " exit with status $ret\n" );
+		$this->croak( $args[0] . " exit with status $ret" );
 	}
 
 	function runWriteCmd( /*...*/ ) {
 		$args = func_get_args();
 		if ( $this->dryRun ) {
-			$encArgs = array_map( 'escapeshellarg', $args );
-			$cmd = implode( ' ', $encArgs );
-			echo "[dry-run] $cmd\n";
+			$this->logger->info( "[dry-run] " . implode( ' ', $args ) );
 		} else {
-			call_user_func_array( array( $this, 'runCmd' ), $args );
+			$this->runCmd( $args );
 		}
 	}
 
 	function chdir( $dir ) {
 		if ( !chdir( $dir ) ) {
-			$this->croak( "Unable to change working directory\n" );
+			$this->croak( "Unable to change working directory" );
 		}
-		echo "cd $dir\n";
+		$this->logger->info( "cd $dir" );
 	}
 
 	function croak( $msg ) {
-		$red = `tput setaf 1`;
-		$reset = `tput sgr0`;
-
-		fprintf( STDERR, "[{$red}ERROR{$reset}] %s\n", $msg );
+		$this->logger->error( $msg );
 		exit( 1 );
 	}
 
@@ -222,7 +233,7 @@ class Branch {
 			return;
 		}
 
-		$this->runCmd(
+		$this->runWriteCmd(
 			'git', 'clone', '-q', '--branch', $branch, '--depth', '1',
 			"{$this->repoPath}/{$path}", $repo
 		);
@@ -254,7 +265,7 @@ class Branch {
 		$oldVersion = $this->oldVersion == 'master'
 					? 'master'
 					: $this->branchPrefix . $this->oldVersion;
-		$this->runCmd(
+		$this->runWriteCmd(
 			'git', 'clone', '-q', $this->clonePath, '-b', $oldVersion, 'wmf'
 		);
 
