@@ -1,0 +1,107 @@
+#!/usr/bin/env php
+<?php
+
+/*
+ * Copyright (C) 2019  Wikimedia Foundation
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * @author Mark A. Hershberger <mah@nichework.com>
+ */
+namespace Wikimedia\Release;
+
+require __DIR__ . '/vendor/autoload.php';
+
+use splitbrain\phpcli\CLI;
+use splitbrain\phpcli\Options;
+use Wikimedia\Release\Branch;
+
+class MakeBranch extends CLI {
+
+	protected function setup( Options $opt ) {
+		$opt->setHelp( "Create Branches" );
+		$opt->registerCommand( 'wmf', 'Create a WMF Branch' );
+
+		$opt->registerOption( 'new', 'New branch name.', 'n', true );
+		$opt->registerOption(
+			'old', 'Old branch name. (default: master)', 'o', true
+		);
+
+		$opt->registerOption( 'dry-run', 'Do everything but push.', 'd' );
+		$opt->registerOption( 'path', 'Path on Local disk from which to '
+							 . 'branch mediawiki-core.', 'p', true );
+		$opt->registerOption( 'continue-from', 'Extension from which to '
+							 . 'resume branching. Mainly useful in the case'
+							 . 'where initial branching fails.', 'c', true );
+		$opt->registerOption( 'keep-tmp', 'Whether to keep files in /tmp '
+							 . 'after finishing. Default is to remove', 'k' );
+	}
+
+	public function die( $msg, $showHelp = true ) {
+		$this->error( $msg );
+		if ( $showHelp ) {
+			echo $this->options->help();
+		}
+		exit( 1 );
+	}
+
+	public function check() {
+		$CWD = getcwd();
+		chdir(__DIR__);
+
+		$current_branch = trim(`git symbolic-ref HEAD`);
+		$abort = false;
+		if ($current_branch == 'refs/heads/master') {
+			$this->info( "Verifying that make-wmf-branch is up to date with "
+						. "origin/master..." );
+			shell_exec('git fetch');
+			$log = `git log HEAD..origin/master --pretty=oneline`;
+			$logsize = strlen($log);
+			if ($logsize > 0) {
+				$this->die( "Out of date, you need to integrate these commits "
+						   . "from origin/master:\n$log", false );
+			} else {
+				$this->success( "ok" );
+			}
+		} else {
+			$this->die( "Wrong branch: $current_branch. Please run this "
+					   . "command from the latest master revision.", false );
+		}
+
+		$changes = `git status --porcelain`;
+		if ( !empty( $changes ) ) {
+			$this->warning( "You have local changes in your tools/release "
+						   . " checkout:\n$changes\n\n" );
+		}
+
+		chdir($CWD);
+	}
+
+	protected function main( Options $opt ) {
+		if ( !$opt->getOpt( 'new' ) ) {
+			$this->die( "'-n' or '--new' must be set.\n", );
+		}
+		if ( !$opt->getCmd() ) {
+			$this->die( "Please provide a branch type." );
+		}
+
+		$this->check();
+		$branch = Branch::getBrancher( $opt->getCmd(), $opt );
+		$branch->initialize();
+		$branch->execute();
+	}
+}
+
+$cli = new MakeBranch();
+$cli->run();

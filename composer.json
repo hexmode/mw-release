@@ -1,0 +1,21 @@
+{
+	"name": "wikimedia/release-branch",
+	"description": "Manage release branches for Wikimedia",
+	"type": "project",
+	"license": "GPL-3.0-or-later",
+	"authors": [
+		{
+			"name": "Mark A. Hershberger",
+			"email": "mah@nichework.com"
+		}
+	],
+	"require": {
+		"php": ">=7.0",
+		"splitbrain/php-cli": "^1.1"
+	},
+	"autoload": {
+		"psr-4": {
+			"Wikimedia\\Release\\": "src/"
+		}
+	}
+}

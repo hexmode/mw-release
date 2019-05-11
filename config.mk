@@ -9,7 +9,7 @@ maintQuiet=-q
 endif
 
 # Working directory
-workDir ?= $(shell test -w /src && echo /src || echo `pwd`/src)
+workDir ?= $(shell test -w /srv && echo /srv || echo `pwd`/srv)
 export workDir
 
 #
@@ -126,7 +126,7 @@ gitCommitEmail ?= $(shell git config --get user.email ||					\
 export gitCommitEmail
 
 # The name to use for the committer
-gitCommitName ?= $(shell git config --get user.name ||					\
+gitCommitName ?= $(shell git config --get user.name ||						\
 	git config --global --get user.name)
 export gitCommitName
 
