@@ -73,26 +73,34 @@ class MakeBranch extends PSR3CLI {
 		$current_branch = trim(`git symbolic-ref HEAD`);
 		$abort = false;
 		if ($current_branch == 'refs/heads/master') {
-			$this->info( "Verifying that make-wmf-branch is up to date with "
-						. "origin/master..." );
+			$this->info(
+				"Verifying that make-branch is up to date with "
+				. "origin/master..."
+			);
 			shell_exec('git fetch');
 			$log = `git log HEAD..origin/master --pretty=oneline`;
 			$logsize = strlen($log);
 			if ($logsize > 0) {
-				$this->die( "Out of date, you need to integrate these commits "
-						   . "from origin/master:\n$log", false );
+				$this->die(
+					"Out of date, you need to integrate these commits "
+					. "from origin/master:\n$log", false
+				);
 			} else {
 				$this->success( "ok" );
 			}
 		} else {
-			$this->die( "Wrong branch: $current_branch. Please run this "
-					   . "command from the latest master revision.", false );
+			$this->die(
+				"Wrong branch: $current_branch. Please run this "
+				. "command from the latest master revision.", false
+			);
 		}
 
 		$changes = `git status --porcelain`;
 		if ( !empty( $changes ) ) {
-			$this->warning( "You have local changes in your tools/release "
-						   . " checkout:\n$changes\n\n" );
+			$this->warning(
+				"You have local changes in your tools/release "
+				. "checkout:\n$changes\n\n"
+			);
 		}
 
 		chdir($CWD);
