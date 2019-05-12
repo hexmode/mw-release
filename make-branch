@@ -19,6 +19,7 @@
  *
  * @author Mark A. Hershberger <mah@nichework.com>
  */
+
 namespace Wikimedia\Release;
 
 require __DIR__ . '/vendor/autoload.php';
