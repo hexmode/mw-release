@@ -49,7 +49,9 @@ abstract class Branch {
 
 		foreach ( array_keys( $iter->getClassMap() ) as $classname ) {
 			if ( $classname !== __CLASS__ ) {
-				$subClassStem = lcfirst( substr( $classname, strlen( __CLASS__ ) + 1 ) );
+				$subClassStem = lcfirst(
+					substr( $classname, strlen( __CLASS__ ) + 1 )
+				);
 				$ret[$subClassStem] = $classname::getDescription();
 			}
 		}
@@ -89,27 +91,47 @@ abstract class Branch {
 	}
 
 	/**
-	 * Handle brancher initialization
+	 * Get a directory where we can work.
+	 *
+	 * @return string
 	 */
-	public function initialize() {
-		$buildDir = sys_get_temp_dir() . '/make-wmf-branch';
-		list( $arg0 ) = get_included_files();
-		$dir = dirname( $arg0 );
+	protected function getWorkDir() {
+		return sys_get_temp_dir() . '/make-wmf-branch';
+	}
 
+	/**
+	 * Set up the defaults for this branch type
+	 */
+	protected function setDefaults() {
 		$repoPath = 'https://gerrit.wikimedia.org/r/mediawiki';
 		$branchPrefix = 'wmf/';
 		$dryRun = false; // Don't actually push anything
 		$noisy = false; // Output git commands
+		$buildDir = $this->getWorkDir();
+
 		if ( is_readable( $dir . '/default.conf' ) ) {
 			require $dir . '/default.conf';
 		}
+
+		// This comes after we load all the default configuration
+		// so it is possible to override default.conf and $branchLists
+		if ( is_readable( $dir . '/local.conf' ) ) {
+			require $dir . '/local.conf';
+		}
+
 		$this->repoPath = $repoPath;
 		$this->branchPrefix = $branchPrefix;
 		$this->dryRun = isset( $this->dryRun ) ?: $dryRun;
 		$this->noisy = $noisy;
 		$this->clonePath = $this->clonePath ?: "{$this->repoPath}/core";
+		$this->buildDir = $buildDir;
 
-		$branchLists = [];
+	}
+
+	/**
+	 * Get a different branch types
+	 */
+	protected function getBranchLists() {
 		if ( is_readable( $dir . '/config.json' ) ) {
 			$branchLists = json_decode(
 				file_get_contents( $dir . '/config.json' ),
@@ -123,11 +145,21 @@ abstract class Branch {
 			require $dir . '/local.conf';
 		}
 
-		$this->buildDir = $buildDir;
 		$this->branchedExtensions = isset( $branchLists['extensions'] ) ?: [];
 		$this->branchedSubmodules = isset( $branchLists['submodules'] ) ?: [];
-		$this->specialExtensions = isset( $branchLists['special_extensions'] )
-								?: [];
+		$this->specialExtensions
+			= isset( $branchLists['special_extensions'] ) ?: [];
+	}
+
+	/**
+	 * Handle brancher initialization
+	 */
+	public function initialize() {
+		// Best way to get the full path to the file being executed.
+		list( $arg0 ) = get_included_files();
+		$dir = dirname( $arg0 );
+		$this->setDefaults( $dir );
+		$this->setBranchLists( $dir );
 	}
 
 	/**
