@@ -19,11 +19,13 @@
 
 namespace Wikimedia\Release;
 
-use splitbrain\phpcli\Options;
-use Psr\Log\LoggerInterface;
 use Exception;
+use Psr\Log\LoggerInterface;
+use Symfony\Component\Finder\Finder;
+use hanneskod\classtools\Iterator\ClassIterator;
+use splitbrain\phpcli\Options;
 
-class Branch {
+abstract class Branch {
 	public $dryRun;
 	public $newVersion, $oldVersion, $buildDir;
 	public $specialExtensions, $branchedExtensions;
@@ -31,12 +33,38 @@ class Branch {
 	public $noisy;
 
 	/**
+	 * Tell the user what kind of branches this class handles
+	 */
+	abstract public static function getDescription();
+
+	/**
+	 * Get the list of available branches.
+	 *
+	 * @return array
+	 */
+	public static function getAvailableBranchTypes() {
+		$finder = new Finder;
+		$iter = new ClassIterator( $finder->in( __DIR__ ) );
+		$ret = [];
+
+		foreach ( array_keys( $iter->getClassMap() ) as $classname ) {
+			if ( $classname !== __CLASS__ ) {
+				$subClassStem = lcfirst( substr( $classname, strlen( __CLASS__ ) + 1 ) );
+				$ret[$subClassStem] = $classname::getDescription();
+			}
+		}
+
+		return $ret;
+	}
+
+	/**
 	 * Factory of branches
 	 *
 	 * @param string $type of brancher to create
 	 * @param Options $opt the user gave
+	 * @return Wikimedia\Release\Branch
 	 */
-	static function getBrancher(
+	public static function getBrancher(
 		string $type,
 		Options $opt,
 		LoggerInterface $logger

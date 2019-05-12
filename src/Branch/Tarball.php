@@ -4,8 +4,8 @@ namespace Wikimedia\Release\Branch;
 
 use Wikimedia\Release\Branch;
 
-class Wmf extends Branch {
+class Tarball extends Branch {
 	public static function getDescription() {
-		return 'Create a WMF Branch';
+		return 'Prepare the tree for a tarball release';
 	}
 }

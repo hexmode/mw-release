@@ -32,14 +32,16 @@ class MakeBranch extends PSR3CLI {
 	protected function setup( Options $opt ) {
 		$opt->setHelp( "Create Branches" );
 		$opt->setCommandHelp( "Specify one of the following branch styles:" );
-		$opt->registerCommand( 'wmf', 'Create a WMF Branch' );
 		$opt->setCompactHelp( );
+		$types = Branch::getAvailableBranchTypes();
+		foreach ( $types as $name => $desc ) {
+			$opt->registerCommand( $name, $desc );
+		}
 
 		$opt->registerOption( 'new', 'New branch name.', 'n', 'name' );
 		$opt->registerOption(
 			'old', 'Old branch name. (default: master)', 'o', 'name'
 		);
-
 		$opt->registerOption( 'dry-run', 'Do everything but push.', 'd' );
 		$opt->registerOption(
 			'path', 'Path on Local disk from which to branch mediawiki-core.',

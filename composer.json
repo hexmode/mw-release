@@ -12,7 +12,8 @@
 	"require": {
 		"php": ">=7.0",
 		"splitbrain/php-cli": "dev-compact-help",
-		"psr/log": "^1.1"
+		"psr/log": "^1.1",
+		"hanneskod/classtools": "^1.2"
 	},
 	"autoload": {
 		"psr-4": {
