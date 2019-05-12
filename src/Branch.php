@@ -35,14 +35,14 @@ abstract class Branch {
 	/**
 	 * Tell the user what kind of branches this class handles
 	 */
-	abstract public static function getDescription();
+	abstract public static function getDescription() :string;
 
 	/**
 	 * Get the list of available branches.
 	 *
 	 * @return array
 	 */
-	public static function getAvailableBranchTypes() {
+	public static function getAvailableBranchTypes() :array {
 		$finder = new Finder;
 		$iter = new ClassIterator( $finder->in( __DIR__ ) );
 		$ret = [];
@@ -70,7 +70,7 @@ abstract class Branch {
 		string $type,
 		Options $opt,
 		LoggerInterface $logger
-	) {
+	) :Branch {
 		$class = __CLASS__ . "\\" . ucFirst( $type );
 		if ( !class_exists( $class ) ) {
 			throw new Exception( "$type is not a proper brancher!" );
@@ -95,19 +95,40 @@ abstract class Branch {
 	 *
 	 * @return string
 	 */
-	protected function getWorkDir() {
-		return sys_get_temp_dir() . '/make-wmf-branch';
-	}
+	abstract protected function getWorkDir() :string;
+
+	/**
+	 * Get the branch prefix default;
+	 *
+	 * @return string
+	 */
+	abstract protected function getBranchPrefix() :string;
+
+	/**
+	 * Get the git repo path
+	 *
+	 * @return string
+	 */
+	abstract protected function getRepoPath() :string;
+
+	/**
+	 * Get the directory to put the branch in
+	 *
+	 * @return string
+	 */
+	abstract protected function getBranchDir() :string;
 
 	/**
 	 * Set up the defaults for this branch type
+	 *
+	 * @param string $dir
 	 */
-	protected function setDefaults() {
-		$repoPath = 'https://gerrit.wikimedia.org/r/mediawiki';
-		$branchPrefix = 'wmf/';
-		$dryRun = false; // Don't actually push anything
-		$noisy = false; // Output git commands
+	protected function setDefaults( string $dir ) {
+		$repoPath = $this->getRepoPath();
+		$branchPrefix = $this->getBranchPrefix();
 		$buildDir = $this->getWorkDir();
+		$dryRun = false; // Push stuff or not
+		$noisy = false; // Output git commands or not
 
 		if ( is_readable( $dir . '/default.conf' ) ) {
 			require $dir . '/default.conf';
@@ -125,13 +146,14 @@ abstract class Branch {
 		$this->noisy = $noisy;
 		$this->clonePath = $this->clonePath ?: "{$this->repoPath}/core";
 		$this->buildDir = $buildDir;
-
 	}
 
 	/**
 	 * Get a different branch types
+	 *
+	 * @param string $dir
 	 */
-	protected function getBranchLists() {
+	protected function setBranchLists( string $dir ) {
 		if ( is_readable( $dir . '/config.json' ) ) {
 			$branchLists = json_decode(
 				file_get_contents( $dir . '/config.json' ),
@@ -166,10 +188,10 @@ abstract class Branch {
 	 * setup an alreadyBranched array that has the names of all extensions
 	 * up-to the extension from which we would like to start branching
 	 *
-	 * @param String/null $extName - name of extension from which to
+	 * @param string/null $extName - name of extension from which to
 	 * start branching
 	 */
-	function setStartExtension( $extName = null ) {
+	public function setStartExtension( string $extName = null ) {
 		if ( $extName === null ) {
 			return;
 		}
@@ -204,7 +226,10 @@ abstract class Branch {
 		$this->alreadyBranched = array_flip( $this->alreadyBranched );
 	}
 
-	function runCmd( /*...*/ ) {
+	/**
+	 * Try to run a command and die if it fails
+	 */
+	public function runCmd( /*...*/ ) {
 		$args = func_get_args();
 		if ( is_array( $args[0] ) ) {
 			$args = $args[0];
@@ -231,7 +256,10 @@ abstract class Branch {
 		$this->croak( $args[0] . " exit with status $ret" );
 	}
 
-	function runWriteCmd( /*...*/ ) {
+	/**
+	 * Conditionally (if not a dry run) run a command.
+	 */
+	public function runWriteCmd( /*...*/ ) {
 		$args = func_get_args();
 		if ( $this->dryRun ) {
 			$this->logger->info( "[dry-run] " . implode( ' ', $args ) );
@@ -240,19 +268,32 @@ abstract class Branch {
 		}
 	}
 
-	function chdir( $dir ) {
+	/**
+	 * Change dir or die if there is a problem.
+	 *
+	 * @param string $dir
+	 */
+	public function chdir( string $dir ) {
 		if ( !chdir( $dir ) ) {
 			$this->croak( "Unable to change working directory" );
 		}
 		$this->logger->info( "cd $dir" );
 	}
 
-	function croak( $msg ) {
+	/**
+	 * Print an error and die
+	 *
+	 * @param string $msg
+	 */
+	public function croak( string $msg ) {
 		$this->logger->error( $msg );
 		exit( 1 );
 	}
 
-	function execute() {
+	/**
+	 * Entry point to branching
+	 */
+	public function execute() {
 		$this->setupBuildDirectory();
 		foreach ( $this->branchedExtensions as $ext ) {
 			$this->branchRepo( $ext );
@@ -263,8 +304,10 @@ abstract class Branch {
 		$this->branch();
 	}
 
-	function setupBuildDirectory() {
-		# Create a temporary build directory
+	/**
+	 * Set up the build directory
+	 */
+	public function setupBuildDirectory() {
 		$this->teardownBuildDirectory();
 		if ( !mkdir( $this->buildDir ) ) {
 			$this->croak(
@@ -274,18 +317,32 @@ abstract class Branch {
 		$this->chdir( $this->buildDir );
 	}
 
-	function teardownBuildDirectory() {
+	/**
+	 * Remove the build directory if it exists
+	 */
+	public function teardownBuildDirectory() {
 		if ( file_exists( $this->buildDir ) ) {
 			$this->runCmd( 'rm', '-rf', '--', $this->buildDir );
 		}
 	}
 
-	function createBranch( $branchName ) {
+	/**
+	 * Create this branch
+	 *
+	 * @param string $branchName
+	 */
+	public function createBranch( string $branchName ) {
 		$this->runCmd( 'git', 'checkout', '-q', '-b', $branchName );
 		$this->runWriteCmd( 'git', 'push', 'origin', $branchName );
 	}
 
-	function branchRepo( $path , $branch = 'master' ) {
+	/**
+	 * Entry point to branch
+	 *
+	 * @param string $path where the git checkout is
+	 * @param string $branch
+	 */
+	public function branchRepo( string $path, string $branch = 'master' ) {
 		$repo = basename( $path );
 
 		// repo has already been branched, so just bail out
@@ -293,7 +350,7 @@ abstract class Branch {
 			return;
 		}
 
-		$this->runWriteCmd(
+		$this->runCmd(
 			'git', 'clone', '-q', '--branch', $branch, '--depth', '1',
 			"{$this->repoPath}/{$path}", $repo
 		);
@@ -320,16 +377,20 @@ abstract class Branch {
 		$this->chdir( $this->buildDir );
 	}
 
-	function branch() {
+	/**
+	 * Push the branch
+	 */
+	public function branch() {
 		# Clone the repository
 		$oldVersion = $this->oldVersion == 'master'
 					? 'master'
 					: $this->branchPrefix . $this->oldVersion;
+		$dest = $this->getBranchDir();
 		$this->runWriteCmd(
-			'git', 'clone', '-q', $this->clonePath, '-b', $oldVersion, 'wmf'
+			'git', 'clone', '-q', $this->clonePath, '-b', $oldVersion, $dest
 		);
 
-		$this->chdir( 'wmf' );
+		$this->chdir( $dest );
 
 		# make sure our clone is up to date with origin
 		if ( $this->clonePath ) {
@@ -368,11 +429,16 @@ abstract class Branch {
 		);
 
 		$this->runWriteCmd(
-			'git', 'push', 'origin', 'wmf/' . $this->newVersion
+			'git', 'push', 'origin', $this->getBranchPrefix() . $this->newVersion
 		);
 	}
 
-	function fixVersion( $fileName ) {
+	/**
+	 * Fix the version number ($wgVersion) in the given file.
+	 *
+	 * @param string $fileName
+	 */
+	public function fixVersion( string $fileName ) {
 		$file = file_get_contents( $fileName );
 		$file = preg_replace(
 			'/^( \$wgVersion \s+ = \s+ )  [^;]*  ( ; \s* ) $/xm',
