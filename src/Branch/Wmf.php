@@ -43,4 +43,26 @@ class Wmf extends Branch {
 	protected function getBranchDir() :string {
 		return 'wmf';
 	}
+
+	/**
+	 * Set up the build directory
+	 */
+	public function setupBuildDirectory() {
+		$this->teardownBuildDirectory();
+		if ( !mkdir( $this->buildDir ) ) {
+			$this->croak(
+				"Unable to create build directory {$this->buildDir}"
+			);
+		}
+		$this->chdir( $this->buildDir );
+	}
+
+	/**
+	 * Remove the build directory if it exists
+	 */
+	public function teardownBuildDirectory() {
+		if ( file_exists( $this->buildDir ) ) {
+			$this->runCmd( 'rm', '-rf', '--', $this->buildDir );
+		}
+	}
 }

@@ -96,12 +96,10 @@ class MakeBranch extends PSR3CLI {
 			);
 		}
 
-		$changes = `git status --porcelain`;
-		if ( !empty( $changes ) ) {
-			$this->warning(
-				"You have local changes in your tools/release "
-				. "checkout:\n$changes\n\n"
-			);
+		$changes = [ "You have local changes in your tools/release checkout:" ];
+		exec( 'git status --porcelain', $changes );
+		if ( count( $changes ) > 1 ) {
+			$this->warning( implode( $changes, "\n" ) );
 		}
 
 		chdir($CWD);
