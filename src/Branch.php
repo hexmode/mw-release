@@ -239,36 +239,10 @@ abstract class Branch {
 	 */
 	public function runCmd( /*...*/ ) {
 		$args = func_get_args();
-		if ( is_array( $args[0] ) ) {
-			$args = $args[0];
-		}
-		if ( $this->noisy && in_array( "-q", $args ) ) {
-			$args = array_diff( $args, [ "-q" ] );
-		}
-		$encArgs = array_map( 'escapeshellarg', $args );
-		$cmd = implode( ' ', $encArgs );
-
-		$printCmd = implode( ' ', $args );
 
 		$attempts = 0;
-		$descriptors = [
-			0 => [ 'pipe', 'r' ], // stdin
-			1 => [ 'pipe', 'w' ], // stdout
-			2 => [ 'pipe', 'w' ], // stderr
-		];
 		do {
-			$this->logger->info( $printCmd );
-
-			$proc = proc_open( $cmd, $descriptors, $pipe );
-			$stdout = stream_get_contents( $pipe[1] );
-			$stderr = stream_get_contents( $pipe[2] );
-			if ( $stdout ) {
-				$this->logger->info( $stdout );
-			}
-			if ( $stderr ) {
-				$this->logger->warning( $stderr );
-			}
-			$ret = proc_close( $proc );
+			$ret = $this->cmd( $args );
 
 			if ( !$ret ) {
 				// It worked!
@@ -278,6 +252,43 @@ abstract class Branch {
 			sleep( 5 );
 		} while ( ++$attempts <= 5 );
 		$this->croak( $args[0] . " exit with status $ret" );
+	}
+
+	/**
+	 * Run a command using proc_open
+	 *
+	 * 
+	 */
+	public function cmd( /*...*/ ): int {
+		$args = func_get_args();
+		if ( is_array( $args[0] ) ) {
+			$args = $args[0];
+		}
+
+		if ( $this->noisy && in_array( "-q", $args ) ) {
+			$args = array_diff( $args, [ "-q" ] );
+		}
+
+		$this->logger->info( implode( ' ', $args ) );
+
+		$proc = proc_open(
+			implode( ' ', array_map( 'escapeshellarg', $args ) ), [
+				0 => [ 'pipe', 'r' ], // stdin
+				1 => [ 'pipe', 'w' ], // stdout
+				2 => [ 'pipe', 'w' ], // stderr
+			], $pipe
+		);
+
+		$stdout = stream_get_contents( $pipe[1] );
+		$stderr = stream_get_contents( $pipe[2] );
+		if ( $stdout ) {
+			$this->logger->info( $stdout );
+		}
+		if ( $stderr ) {
+			$this->logger->warning( $stderr );
+		}
+
+		return proc_close( $proc );
 	}
 
 	/**
@@ -411,7 +422,6 @@ abstract class Branch {
 	}
 
 	public function createAndUseNewFromMaster() {
-		
 		# Create a new branch from master and switch to it
 		$newVersion = $this->branchPrefix . $this->newVersion;
 		$this->runCmd( 'git', 'checkout', '-q', '-b', $newVersion );
