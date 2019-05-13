@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "ccf38d59e58b8c96bf3d7d4f5a64190f",
+    "content-hash": "458368ae03ad463605e87830868899aa",
     "packages": [
         {
             "name": "hanneskod/classtools",
@@ -253,6 +253,58 @@
             "description": "Symfony Finder Component",
             "homepage": "https://symfony.com",
             "time": "2019-04-06T13:51:08+00:00"
+        },
+        {
+            "name": "wikimedia/at-ease",
+            "version": "v2.0.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/wikimedia/at-ease.git",
+                "reference": "013ac61929797839c80a111a3f1a4710d8248e7a"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/wikimedia/at-ease/zipball/013ac61929797839c80a111a3f1a4710d8248e7a",
+                "reference": "013ac61929797839c80a111a3f1a4710d8248e7a",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=5.6.99"
+            },
+            "require-dev": {
+                "jakub-onderka/php-console-highlighter": "0.3.2",
+                "jakub-onderka/php-parallel-lint": "1.0.0",
+                "mediawiki/mediawiki-codesniffer": "22.0.0",
+                "mediawiki/minus-x": "0.3.1",
+                "ockcyp/covers-validator": "0.5.1 || 0.6.1",
+                "phpunit/phpunit": "4.8.36 || ^6.5"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Wikimedia\\AtEase\\": "src/Wikimedia/AtEase/"
+                },
+                "files": [
+                    "src/Wikimedia/Functions.php"
+                ]
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "GPL-2.0-or-later"
+            ],
+            "authors": [
+                {
+                    "name": "Tim Starling",
+                    "email": "tstarling@wikimedia.org"
+                },
+                {
+                    "name": "MediaWiki developers",
+                    "email": "wikitech-l@lists.wikimedia.org"
+                }
+            ],
+            "description": "Safe replacement to @ for suppressing warnings.",
+            "homepage": "https://www.mediawiki.org/wiki/at-ease",
+            "time": "2018-10-10T15:39:06+00:00"
         }
     ],
     "packages-dev": [],

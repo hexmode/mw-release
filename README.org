@@ -5,7 +5,7 @@ This document describes how to create MediaWiki releases.
 * Simplicity itself
 Ideally, after checking out this repository, you should simply be able to type
 #+begin_src bash
-$ make tarball releaseVer=1.32.0
+$ make tarball releaseVer=1.33.0
 #+end_src
 and have it generate a tarball directly.
 

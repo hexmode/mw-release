@@ -22,6 +22,7 @@
 namespace Wikimedia\Release\Branch;
 
 use Wikimedia\Release\Branch;
+use Wikimedia\AtEase\AtEase;
 
 class Tarball extends Branch {
 	public static function getDescription() :string {
@@ -55,4 +56,23 @@ class Tarball extends Branch {
 		}
 		return $branch;
 	}
+
+	public function setupBuildDirectory() {
+		if ( !is_dir( $this->buildDir ) ) {
+			AtEase::suppressWarnings();
+			if ( lstat( $this->buildDir ) !== false) {
+				$this->croak(
+					"Unable to create build directory {$this->buildDir} because file exists"
+				);
+			}
+			AtEase::restoreWarnings();
+			if ( !mkdir( $this->buildDir ) ) {
+				$this->croak(
+					"Unable to create build directory {$this->buildDir}"
+				);
+			}
+		}
+		$this->chdir( $this->buildDir );
+	}
+
 }

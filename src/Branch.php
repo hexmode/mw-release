@@ -22,9 +22,10 @@
 namespace Wikimedia\Release;
 
 use Exception;
+use hanneskod\classtools\Iterator\ClassIterator;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Finder\Finder;
-use hanneskod\classtools\Iterator\ClassIterator;
+use Wikimedia\AtEase\AtEase;
 use splitbrain\phpcli\Options;
 
 abstract class Branch {
@@ -121,6 +122,11 @@ abstract class Branch {
 	abstract protected function getBranchDir() :string;
 
 	/**
+	 * Set up the build directory
+	 */
+	abstract public function setupBuildDirectory();
+
+	/**
 	 * Set up the defaults for this branch type
 	 *
 	 * @param string $dir
@@ -199,7 +205,7 @@ abstract class Branch {
 		}
 
 		$foundKey = false;
-		foreach ( array( $this->branchedExtensions ) as $branchedArr ) {
+		foreach ( [ $this->branchedExtensions ] as $branchedArr ) {
 			$key = array_search( $extName, $branchedArr );
 
 			if ( $key !== false ) {
@@ -237,16 +243,32 @@ abstract class Branch {
 			$args = $args[0];
 		}
 		if ( $this->noisy && in_array( "-q", $args ) ) {
-			$args = array_diff( $args, array( "-q" ) );
+			$args = array_diff( $args, [ "-q" ] );
 		}
 		$encArgs = array_map( 'escapeshellarg', $args );
 		$cmd = implode( ' ', $encArgs );
+
 		$printCmd = implode( ' ', $args );
 
 		$attempts = 0;
+		$descriptors = [
+			0 => [ 'pipe', 'r' ], // stdin
+			1 => [ 'pipe', 'w' ], // stdout
+			2 => [ 'pipe', 'w' ], // stderr
+		];
 		do {
 			$this->logger->info( $printCmd );
-			passthru( $cmd, $ret );
+
+			$proc = proc_open( $cmd, $descriptors, $pipe );
+			$stdout = stream_get_contents( $pipe[1] );
+			$stderr = stream_get_contents( $pipe[2] );
+			if ( $stdout ) {
+				$this->logger->info( $stdout );
+			}
+			if ( $stderr ) {
+				$this->logger->warning( $stderr );
+			}
+			$ret = proc_close( $proc );
 
 			if ( !$ret ) {
 				// It worked!
@@ -307,28 +329,6 @@ abstract class Branch {
 	}
 
 	/**
-	 * Set up the build directory
-	 */
-	public function setupBuildDirectory() {
-		$this->teardownBuildDirectory();
-		if ( !mkdir( $this->buildDir ) ) {
-			$this->croak(
-				"Unable to create build directory {$this->buildDir}"
-			);
-		}
-		$this->chdir( $this->buildDir );
-	}
-
-	/**
-	 * Remove the build directory if it exists
-	 */
-	public function teardownBuildDirectory() {
-		if ( file_exists( $this->buildDir ) ) {
-			$this->runCmd( 'rm', '-rf', '--', $this->buildDir );
-		}
-	}
-
-	/**
 	 * Create this branch
 	 *
 	 * @param string $branchName
@@ -380,30 +380,56 @@ abstract class Branch {
 	}
 
 	/**
-	 * Push the branch
+	 * Handle cloning to a particular destination
+	 *
+	 * @param string $oldVersion
+	 * @param string $des
 	 */
-	public function branch() {
-		# Clone the repository
-		$oldVersion = $this->oldVersion == 'master'
-					? 'master'
-					: $this->branchPrefix . $this->oldVersion;
-		$dest = $this->getBranchDir();
-		$this->runWriteCmd(
-			'git', 'clone', '-q', $this->clonePath, '-b', $oldVersion, $dest
-		);
+	public function cloneAndEnterDest( $oldVersion, $dest ) {
+		AtEase::suppressWarnings();
+		if ( lstat( $dest ) !== false ) {
+			$this->logger->warning( "Destination ($dest) already exists, not cloning" );
+		} else {
+			$this->runCmd(
+				'git', 'clone', '-q', $this->clonePath, '-b', $oldVersion, $dest
+			);
+		}
+		AtEase::restoreWarnings();
 
 		$this->chdir( $dest );
 
 		# make sure our clone is up to date with origin
 		if ( $this->clonePath ) {
+			# Substituted "--rebase" for "--ff-only" here.
+			# See https://stackoverflow.com/a/43460847
+			# This may not be right since the fatal effects may have
+			# been what was wanted
 			$this->runCmd(
-				'git', 'pull', '-q', '--ff-only', 'origin', $oldVersion
+				'git', 'pull', '-q', '--rebase', 'origin', $oldVersion
 			);
 		}
+	}
 
+	public function createAndUseNewFromMaster() {
+		
 		# Create a new branch from master and switch to it
 		$newVersion = $this->branchPrefix . $this->newVersion;
 		$this->runCmd( 'git', 'checkout', '-q', '-b', $newVersion );
+	}
+
+	/**
+	 * Push the branch
+	 */
+	public function branch() {
+		# Clone the repository
+		$oldVersion = $this->oldVersion === 'master'
+					? 'master'
+					: $this->branchPrefix . $this->oldVersion;
+		$dest = $this->getBranchDir();
+
+		$this->cloneAndEnterDest( $oldVersion, $dest );
+
+		$this->createAndUseNewFromMaster();
 
 		# Add extensions/skins/vendor
 		foreach ( $this->branchedExtensions as $name ) {
@@ -427,7 +453,7 @@ abstract class Branch {
 		# Do intermediate commit
 		$this->runCmd(
 			'git', 'commit', '-a', '-q', '-m',
-			"Creating new WMF {$this->newVersion} branch"
+			"Creating new " . lcFirst( __CLASS__ ) . " {$this->newVersion} branch"
 		);
 
 		$this->runWriteCmd(
