@@ -50,6 +50,11 @@ showPreviousRelease:
 getAllTarballs: downloadTarball
 	${MAKE} getAllTarballs releaseVer=${prevReleaseVer}
 
+getPreviousTarball:
+	# Fork another, or we get recursiveness
+	${MAKE} downloadTarball releaseVer=${prevReleaseVer}					\
+		majorReleaseVer=${prevMajorVer}
+
 # Download all artifacts for a release.
 downloadTarball:
 	test -n "${thisMinorVer}" -a "${thisMinorVer}" != "---" || (				\
@@ -143,11 +148,7 @@ removeTag: verifyReleaseGiven
 
 #
 clone:
-	test -e ${cloneDir}/.git || (											\
-		echo ${indent}"Cloning ${repo} to $${cloneDir} (${branch})";		\
-		git clone ${maybeSubmodules} -b ${branch} ${repo}					\
-			${cloneDir}														\
-	) && (																	\
+	test -e ${cloneDir}/.git && (											\
 		echo ${indent}"Updating ${repo} in ${cloneDir}";					\
 		cd ${cloneDir};														\
 		git fetch;															\
@@ -156,6 +157,10 @@ clone:
 			echo git checkout ${branch}										\
 		);																	\
 		git pull ${maybeSubmodules}											\
+	) || (																	\
+		echo ${indent}"Cloning ${repo} to $${cloneDir} (${branch})";		\
+		git clone ${maybeSubmodules} -b ${branch} ${repo}					\
+			${cloneDir}														\
 	)
 
 ${mwDir}/${relBranch}:
@@ -165,6 +170,8 @@ ${mwDir}/${relBranch}:
 	)
 	${MAKE} clone cloneDir=${mwDir}/master repo=${mwGit}					\
 		branch=master
+	git ls-remote --heads ${mwGit} ${relBranch} ||							\
+		${makeBranch} -n ${relBranch} -d -p ${mwGit} tarball
 	${MAKE} clone cloneDir=${mwDir}/${relBranch}							\
 		repo=${mwDir}/master branch=${relBranch}
 
