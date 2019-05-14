@@ -24,6 +24,10 @@ namespace Wikimedia\Release\Branch;
 use Wikimedia\Release\Branch;
 
 class Wmf extends Branch {
+	public static function getShortname() :string {
+		return 'wmf';
+	}
+
 	public static function getDescription() :string {
 		return 'Create a WMF Branch';
 	}

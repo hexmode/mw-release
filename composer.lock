@@ -4,8 +4,59 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "458368ae03ad463605e87830868899aa",
+    "content-hash": "8762b57346e769a5e793df0c8afd07cb",
     "packages": [
+        {
+            "name": "christiaan/stream-process",
+            "version": "1.0.2",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/christiaan/stream-process.git",
+                "reference": "a1c4eae0dadd65bc66bec2a909bc401f1054dfff"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/christiaan/stream-process/zipball/a1c4eae0dadd65bc66bec2a909bc401f1054dfff",
+                "reference": "a1c4eae0dadd65bc66bec2a909bc401f1054dfff",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">= 5.3.2"
+            },
+            "require-dev": {
+                "mkraemer/react-pcntl": "dev-master",
+                "phpunit/phpunit": "^7.2",
+                "react/event-loop": "*"
+            },
+            "suggest": {
+                "react/event-loop": "Allows easier working with streams and waiting till data is available"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-0": {
+                    "Christiaan\\StreamProcess": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Christiaan Baartse",
+                    "email": "anotherhero@gmail.com"
+                }
+            ],
+            "description": "Wrapper around proc_open to ease communication via streams between processes",
+            "keywords": [
+                "event-loop",
+                "proc_open",
+                "process",
+                "react",
+                "stream"
+            ],
+            "time": "2018-07-07T11:21:23+00:00"
+        },
         {
             "name": "hanneskod/classtools",
             "version": "1.2.0",
@@ -151,6 +202,48 @@
                 "psr-3"
             ],
             "time": "2018-11-20T15:27:04+00:00"
+        },
+        {
+            "name": "react/event-loop",
+            "version": "v1.1.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/reactphp/event-loop.git",
+                "reference": "a0ecac955c67b57c40fe4a1b88a7cca1b58c982d"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/reactphp/event-loop/zipball/a0ecac955c67b57c40fe4a1b88a7cca1b58c982d",
+                "reference": "a0ecac955c67b57c40fe4a1b88a7cca1b58c982d",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=5.3.0"
+            },
+            "require-dev": {
+                "phpunit/phpunit": "^7.0 || ^6.4 || ^5.7 || ^4.8.35"
+            },
+            "suggest": {
+                "ext-event": "~1.0 for ExtEventLoop",
+                "ext-pcntl": "For signal handling support when using the StreamSelectLoop",
+                "ext-uv": "* for ExtUvLoop"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "React\\EventLoop\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "description": "ReactPHP's core reactor event loop that libraries can use for evented I/O.",
+            "keywords": [
+                "asynchronous",
+                "event-loop"
+            ],
+            "time": "2019-02-07T16:19:49+00:00"
         },
         {
             "name": "splitbrain/php-cli",

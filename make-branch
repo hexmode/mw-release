@@ -33,7 +33,7 @@ class MakeBranch extends PSR3CLI {
 	protected function setup( Options $opt ) {
 		$opt->setHelp( "Create Branches" );
 		$opt->setCommandHelp( "Specify one of the following branch styles:" );
-		$opt->setCompactHelp( );
+		$opt->setCompactHelp();
 		$types = Branch::getAvailableBranchTypes();
 		foreach ( $types as $name => $desc ) {
 			$opt->registerCommand( $name, $desc );
@@ -67,44 +67,6 @@ class MakeBranch extends PSR3CLI {
 		exit( 1 );
 	}
 
-	public function check() {
-		$CWD = getcwd();
-		chdir(__DIR__);
-
-		$current_branch = trim(`git symbolic-ref HEAD`);
-		$abort = false;
-		if ($current_branch == 'refs/heads/master') {
-			$this->info(
-				"Verifying that make-branch is up to date with "
-				. "origin/master..."
-			);
-			shell_exec('git fetch');
-			$log = `git log HEAD..origin/master --pretty=oneline`;
-			$logsize = strlen($log);
-			if ($logsize > 0) {
-				$this->die(
-					"Out of date, you need to integrate these commits "
-					. "from origin/master:\n$log", false
-				);
-			} else {
-				$this->success( "ok" );
-			}
-		} else {
-			$this->die(
-				"Wrong branch: $current_branch. Please run this "
-				. "command from the latest master revision.", false
-			);
-		}
-
-		$changes = [ "You have local changes in your tools/release checkout:" ];
-		exec( 'git status --porcelain', $changes );
-		if ( count( $changes ) > 1 ) {
-			$this->warning( implode( $changes, "\n" ) );
-		}
-
-		chdir($CWD);
-	}
-
 	protected function main( Options $opt ) {
 		if ( !$opt->getOpt( 'new' ) ) {
 			$this->die( "'-n' or '--new' must be set.\n", );
@@ -113,7 +75,6 @@ class MakeBranch extends PSR3CLI {
 			$this->die( "Please provide a branch type." );
 		}
 
-		$this->check();
 		$branch = Branch::getBrancher( $opt->getCmd(), $opt, $this );
 		$branch->initialize();
 		$branch->execute();

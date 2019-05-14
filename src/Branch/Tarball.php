@@ -25,6 +25,11 @@ use Wikimedia\Release\Branch;
 use Wikimedia\AtEase\AtEase;
 
 class Tarball extends Branch {
+
+	public static function getShortname() :string {
+		return 'tarball';
+	}
+
 	public static function getDescription() :string {
 		return 'Prepare the tree for a tarball release';
 	}
