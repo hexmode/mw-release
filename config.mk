@@ -33,15 +33,16 @@ oldHOME=$(shell getent passwd $$USER | cut -d: -f6)
 HOME=${workDir}
 export HOME
 
-# Following are variables for commands that need args
+thisDir=$(patsubst %/,%,$(dir $(abspath $(lastword ${MAKEFILE_LIST}))))
+releasesUrl=https://releases.wikimedia.org/mediawiki/
+
+# Following are variables for commands and any standard args
 GIT=git --no-pager --work-tree=${mwDir}/${relBranch}						\
 		--git-dir=${mwDir}/${relBranch}/.git
 MAKE=make -f $(abspath $(firstword ${MAKEFILE_LIST})) indent="${indent}\> "	\
 	releaseVer=${releaseVer}
 WGET=wget ${wgetQuiet}
-
-thisDir=$(patsubst %/,%,$(dir $(abspath$(lastword ${MAKEFILE_LIST}))))
-releasesUrl=https://releases.wikimedia.org/mediawiki/
+makeBranch=${thisDir}/make-branch
 
 # Source of Gerrit
 gerritHead ?= https://gerrit.wikimedia.org/r

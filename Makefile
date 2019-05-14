@@ -170,7 +170,7 @@ ${mwDir}/${relBranch}:
 	)
 	${MAKE} clone cloneDir=${mwDir}/master repo=${mwGit}					\
 		branch=master
-	git ls-remote --heads ${mwGit} ${relBranch} ||							\
+	git ls-remote --exit-code --heads ${mwGit} ${relBranch} ||				\
 		${makeBranch} -n ${relBranch} -d -p ${mwGit} tarball
 	${MAKE} clone cloneDir=${mwDir}/${relBranch}							\
 		repo=${mwDir}/master branch=${relBranch}
