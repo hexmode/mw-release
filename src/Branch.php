@@ -476,17 +476,27 @@ abstract class Branch {
 	 * @param string $des
 	 */
 	public function cloneAndEnterDest( $oldVersion, $dest ) {
+		$ret = false;
 		AtEase::suppressWarnings();
 		if ( lstat( $dest ) !== false ) {
+			AtEase::restoreWarnings();
 			$this->logger->warning( "Destination ($dest) already exists, not cloning" );
 		} else {
-			$this->runCmd(
+			AtEase::restoreWarnings();
+			$ret = $this->runCmd(
 				'git', 'clone', $this->clonePath, '-b', $oldVersion, $dest
 			);
+			$this->chdir( $dest );
+			if ( !$ret ) {
+				$ret = $this->runCmd(
+					'git', 'remote', 'set-url', 'origin', $this->getRepoPath()
+				);
+			}
 		}
-		AtEase::restoreWarnings();
 
-		$this->chdir( $dest );
+		if ( $ret ) {
+			$this->croak( "Please fix the problems before continuing" );
+		}
 	}
 
 	/**
@@ -517,6 +527,7 @@ abstract class Branch {
 		);
 		$localTracksRemote = $tracking === $remoteNewVersion;
 
+		$ret = true;
 		if ( $hasRemoteBranch && !$hasLocalBranch ) {
 			$this->logger->warning( "Remote already has $newVersion. Using that" );
 			$ret = $this->cmd( 'git', 'checkout', $newVersion );
@@ -534,6 +545,11 @@ abstract class Branch {
 		} elseif ( !$hasLocalBranch ) {
 			# Create a new branch from master and switch to it
 			$ret = $this->cmd( 'git', 'checkout', '-b', $newVersion, 'origin/master' );
+			if ( !$ret ) {
+				$ret = $this->cmd(
+					'git', 'remote', 'set-url', 'origin', $this->clonePath
+				);
+			}
 		}
 		if ( $ret ) {
 			$this->croak( "Please fix the problems before continuing" );
@@ -593,7 +609,7 @@ abstract class Branch {
 		$this->handleVersionUpdate();
 
 		$this->runWriteCmd(
-			'git', 'push', 'origin', $this->getBranchPrefix() . $this->newVersion
+			'git', 'push', '-u', 'origin', $this->getBranchPrefix() . $this->newVersion
 		);
 	}
 

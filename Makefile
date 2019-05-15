@@ -22,10 +22,6 @@ include ${mkfileDir}/help.mk
 include ${mkfileDir}/config.mk
 include ${mkfileDir}/gpg.mk
 
-#
-getEnv:
-	env
-
 # Checkout, tag, and build a tarball
 tarball: tag doTarball
 
@@ -171,7 +167,7 @@ ${mwDir}/${relBranch}:
 	${MAKE} clone cloneDir=${mwDir}/master repo=${mwGit}					\
 		branch=master
 	git ls-remote --exit-code --heads ${mwGit} ${relBranch} ||				\
-		${makeBranch} -n ${relBranch} -d -p ${mwGit} tarball
+		${makeBranch} -n ${relBranch} -d -p ${mwDir}/master tarball
 	${MAKE} clone cloneDir=${mwDir}/${relBranch}							\
 		repo=${mwDir}/master branch=${relBranch}
 
