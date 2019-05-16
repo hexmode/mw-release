@@ -54,15 +54,16 @@ class Tarball extends Branch {
 		return "$path/mediawiki";
 	}
 
-	protected function getBranchDir() :string {
+	protected function getBranchDir() :string  {
 		$branch = getenv( "relBranch" );
-		if ( !$branch ) {
+		if ( $branch === false ) {
+			$branch = "";		// For psalm
 			$this->croak( "The environment variable relBranch must be set" );
 		}
 		return $branch;
 	}
 
-	public function setupBuildDirectory() {
+	public function setupBuildDirectory() :void {
 		if ( !is_dir( $this->buildDir ) ) {
 			AtEase::suppressWarnings();
 			if ( lstat( $this->buildDir ) !== false) {

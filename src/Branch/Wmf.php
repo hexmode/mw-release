@@ -51,7 +51,7 @@ class Wmf extends Branch {
 	/**
 	 * Set up the build directory
 	 */
-	public function setupBuildDirectory() {
+	public function setupBuildDirectory() :void {
 		$this->teardownBuildDirectory();
 		if ( !mkdir( $this->buildDir ) ) {
 			$this->croak(
@@ -64,7 +64,7 @@ class Wmf extends Branch {
 	/**
 	 * Remove the build directory if it exists
 	 */
-	public function teardownBuildDirectory() {
+	public function teardownBuildDirectory() :void {
 		if ( file_exists( $this->buildDir ) ) {
 			$this->runCmd( 'rm', '-rf', '--', $this->buildDir );
 		}

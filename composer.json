@@ -28,5 +28,8 @@
 			"type": "vcs",
 			"url": "https://github.com/hexmode/php-cli"
 		}
-	]
+	],
+	"require-dev": {
+		"vimeo/psalm": "^3.2"
+	}
 }
