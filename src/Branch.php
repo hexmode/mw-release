@@ -146,7 +146,6 @@ abstract class Branch {
 			$opt->getOpt( 'new' ),
 			$opt->getOpt( 'path', '' ),
 			$opt->getOpt( 'dryRun', true ),
-			$opt->getOpt( 'new' ),
 			$logger
 		);
 	}
@@ -183,6 +182,13 @@ abstract class Branch {
 	 * Set up the build directory
 	 */
 	abstract public function setupBuildDirectory() :void;
+
+	/**
+	 * Get the config.json file to use for this branch type
+	 *
+	 * @return string
+	 */
+	abstract protected function getConfigJson( string $dir ) :string;
 
 	/**
 	 * Set up the defaults for this branch type
@@ -229,14 +235,17 @@ abstract class Branch {
 	 * @param string $dir
 	 */
 	protected function setBranchLists( string $dir ) :void {
-		if ( is_readable( $dir . '/config.json' ) ) {
+		$branchLists = [];
+		$configJson = $this->getConfigJson( $dir );
+		
+		if ( is_readable( $configJson ) ) {
 			$branchLists = json_decode(
-				file_get_contents( $dir . '/config.json' ),
+				file_get_contents( $configJson ),
 				true
 			);
 		}
 
-		$this->stupidSchemaCheck( 'key', $branchLists, 'config.json' );
+		$this->stupidSchemaCheck( 'key', $branchLists, $configJson );
 
 		// This comes after we load all the default configuration
 		// so it is possible to override default.conf and $branchLists

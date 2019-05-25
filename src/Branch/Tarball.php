@@ -63,6 +63,10 @@ class Tarball extends Branch {
 		return $branch;
 	}
 
+	protected function getConfigJson( string $dir ) :string {
+		return $dir . '/tarball-config.json';
+	}
+
 	public function setupBuildDirectory() :void {
 		if ( !is_dir( $this->buildDir ) ) {
 			AtEase::suppressWarnings();

@@ -48,6 +48,10 @@ class Wmf extends Branch {
 		return 'wmf';
 	}
 
+	protected function getConfigJson( string $dir ) :string {
+		return $dir . '/config.json';
+	}
+
 	/**
 	 * Set up the build directory
 	 */
