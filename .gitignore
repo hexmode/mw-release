@@ -3,3 +3,5 @@
 flycheck_*
 *~
 composer.lock
+default.conf
+local.conf
