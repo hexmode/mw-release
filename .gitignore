@@ -2,3 +2,4 @@
 /srv/
 flycheck_*
 *~
+composer.lock

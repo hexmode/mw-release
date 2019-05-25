@@ -149,8 +149,6 @@ abstract class Branch {
 			$opt->getOpt( 'new' ),
 			$logger
 		);
-
-		return;
 	}
 
 	/**
@@ -216,6 +214,15 @@ abstract class Branch {
 		$this->buildDir = $buildDir;
 	}
 
+	protected function stupidSchemaCheck( string $text, array &$var, string $file ) :void {
+		foreach( [ 'extensions', 'submodules', 'special_extensions' ] as $key ) {
+			if ( !isset( $var[$key] ) ) {
+				$var[$key] = [];
+				$this->logger->warning( "The $text '$key' is missing from $file" );
+			}
+		}
+	}
+
 	/**
 	 * Get a different branch types
 	 *
@@ -229,16 +236,19 @@ abstract class Branch {
 			);
 		}
 
+		$this->stupidSchemaCheck( 'key', $branchLists, 'config.json' );
+
 		// This comes after we load all the default configuration
 		// so it is possible to override default.conf and $branchLists
 		if ( is_readable( $dir . '/local.conf' ) ) {
 			require $dir . '/local.conf';
 		}
 
-		$this->branchedExtensions = isset( $branchLists['extensions'] ) ?: [];
-		$this->branchedSubmodules = isset( $branchLists['submodules'] ) ?: [];
-		$this->specialExtensions
-			= isset( $branchLists['special_extensions'] ) ?: [];
+		$this->stupidSchemaCheck( 'index is null for', $branchLists, 'local.conf' );
+
+		$this->branchedExtensions = $branchLists['extensions'] ?: [];
+		$this->branchedSubmodules = $branchLists['submodules'] ?: [];
+		$this->specialExtensions = $branchLists['special_extensions'] ?: [];
 	}
 
 	/**
@@ -378,7 +388,8 @@ abstract class Branch {
 
 		$loop->addReadStream(
 			$proc->getReadStream(),
-			function ( $stream ) use ( $loop ) {
+			/** @param resource $stream */
+			function ( $stream ) use ( $loop ) :void {
 				$out = fgets( $stream );
 				if ( $out !== false ) {
 					if ( $this->storeOutput ) {
@@ -392,7 +403,8 @@ abstract class Branch {
 		);
 		$loop->addReadStream(
 			$proc->getErrorStream(),
-			function ( $stream ) {
+			/** @param resource $stream */
+			function ( $stream ) :void {
 				$out = fgets( $stream );
 				if ( $out !== false ) {
 					$this->logger->warning( $out );

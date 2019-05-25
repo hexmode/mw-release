@@ -30,6 +30,8 @@
 		}
 	],
 	"require-dev": {
-		"vimeo/psalm": "^3.2"
-	}
+		"vimeo/psalm": "^3.2",
+		"felixfbecker/language-server": "dev-master"
+	},
+	"minimum-stability": "dev"
 }
