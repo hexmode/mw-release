@@ -54,15 +54,17 @@ class Wmf extends Branch {
 
 	/**
 	 * Set up the build directory
+	 *
+	 * @returns string
 	 */
-	public function setupBuildDirectory() :void {
+	public function setupBuildDirectory() :string {
 		$this->teardownBuildDirectory();
 		if ( !mkdir( $this->buildDir ) ) {
 			$this->croak(
 				"Unable to create build directory {$this->buildDir}"
 			);
 		}
-		$this->chdir( $this->buildDir );
+		return $this->buildDir;
 	}
 
 	/**

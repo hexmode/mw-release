@@ -31,32 +31,17 @@ use Wikimedia\Release\Branch;
 class MakeBranch extends PSR3CLI {
 
 	protected function setup( Options $opt ) {
-		$opt->setHelp( "Create Branches" );
-		$opt->setCommandHelp( "Specify one of the following branch styles:" );
-		$opt->setCompactHelp();
-		$types = Branch::getAvailableBranchTypes();
-		foreach ( $types as $name => $desc ) {
-			$opt->registerCommand( $name, $desc );
+		Branch::setupOptions( $opt );
+	}
+
+	protected function main( Options $opt ) {
+		$branch = Branch::getBrancher( $opt->getCmd(), $opt, $this );
+		if ( is_string( $branch ) ) {
+			$this->die( $branch );
 		}
 
-		$opt->registerOption( 'new', 'New branch name.', 'n', 'name' );
-		$opt->registerOption(
-			'old', 'Old branch name. (default: master)', 'o', 'name'
-		);
-		$opt->registerOption( 'dry-run', 'Do everything but push.', 'd' );
-		$opt->registerOption(
-			'path', 'Path on Local disk from which to branch mediawiki-core.',
-			'p', 'path'
-		);
-		$opt->registerOption(
-			'continue-from', 'Extension from which to resume branching. Mainly '
-			. 'useful in the case where initial branching fails.', 'c',
-			'ext'
-		);
-		$opt->registerOption(
-			'keep-tmp', 'Whether to keep files in /tmp after finishing. '
-			. 'Default is to remove', 'k'
-		);
+		$branch->initialize();
+		$branch->execute();
 	}
 
 	public function die( $msg, $showHelp = true ) {
@@ -65,19 +50,6 @@ class MakeBranch extends PSR3CLI {
 			echo $this->options->help();
 		}
 		exit( 1 );
-	}
-
-	protected function main( Options $opt ) {
-		if ( !$opt->getOpt( 'new' ) ) {
-			$this->die( "'-n' or '--new' must be set.\n", );
-		}
-		if ( !$opt->getCmd() ) {
-			$this->die( "Please provide a branch type." );
-		}
-
-		$branch = Branch::getBrancher( $opt->getCmd(), $opt, $this );
-		$branch->initialize();
-		$branch->execute();
 	}
 }
 

@@ -67,7 +67,7 @@ class Tarball extends Branch {
 		return $dir . '/tarball-config.json';
 	}
 
-	public function setupBuildDirectory() :void {
+	public function setupBuildDirectory() :string {
 		if ( !is_dir( $this->buildDir ) ) {
 			AtEase::suppressWarnings();
 			if ( lstat( $this->buildDir ) !== false) {
@@ -82,7 +82,7 @@ class Tarball extends Branch {
 				);
 			}
 		}
-		$this->chdir( $this->buildDir );
+		return $this->buildDir;
 	}
 
 }

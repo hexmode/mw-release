@@ -21,18 +21,13 @@
 
 namespace Wikimedia\Release;
 
-use Christiaan\StreamProcess\StreamProcess;
 use Exception;
 use hanneskod\classtools\Iterator\ClassIterator;
 use Psr\Log\LoggerInterface;
-use React\EventLoop\Factory as LoopFactory;
 use splitbrain\phpcli\Options;
 use Symfony\Component\Finder\Finder;
-use Wikimedia\AtEase\AtEase;
 
 abstract class Branch {
-	/** @var bool */
-	protected $dryRun;
 	/** @var string */
 	protected $newVersion;
 	/** @var string */
@@ -49,10 +44,6 @@ abstract class Branch {
 	protected $repoPath;
 	/** @var bool */
 	protected $noisy;
-	/** @var string */
-	protected $output;
-	/** @var bool */
-	protected $storeOutput;
 	/** @var LoggerInterface */
 	protected $logger;
 	/** @var string */
@@ -61,32 +52,10 @@ abstract class Branch {
 	protected $clonePath;
 	/** @var array */
 	protected $alreadyBranched;
-
-	public function __construct(
-		string $oldVersion,
-		string $branchPrefix,
-		string $newVersion,
-		string $clonePath,
-		bool $dryRun,
-		LoggerInterface $logger
-	) {
-		$this->oldVersion = $oldVersion;
-		$this->branchPrefix = $branchPrefix;
-		$this->newVersion = $newVersion;
-		$this->clonePath = $clonePath;
-		$this->dryRun = $dryRun;
-		$this->logger = $logger;
-
-		$this->output = "";
-		$this->repoPath = "";
-		$this->buildDir = "";
-		$this->noisy = false;
-		$this->storeOutput = false;
-		$this->branchedExtensions = [];
-		$this->branchedSubmodules = [];
-		$this->alreadyBranched = [];
-		$this->specialExtensions = [];
-	}
+	/** @var Control */
+	protected $control;
+	/** @var string */
+	protected $branchFrom;
 
 	/**
 	 * How will we refer to this branch
@@ -101,54 +70,6 @@ abstract class Branch {
 	 * @return string
 	 */
 	abstract public static function getDescription() :string;
-
-	/**
-	 * Get the list of available branches.
-	 *
-	 * @return array
-	 */
-	public static function getAvailableBranchTypes() :array {
-		$finder = new Finder;
-		$iter = new ClassIterator( $finder->in( __DIR__ ) );
-		$ret = [];
-
-		foreach ( array_keys( $iter->getClassMap() ) as $classname ) {
-			if ( $classname !== __CLASS__ ) {
-				$shortname = $classname::getShortname();
-				$desc = $classname::getDescription();
-				$ret[$shortname] = $desc;
-			}
-		}
-
-		return $ret;
-	}
-
-	/**
-	 * Factory of branches
-	 *
-	 * @param string $type of brancher to create
-	 * @param Options $opt the user gave
-	 * @return Wikimedia\Release\Branch
-	 */
-	public static function getBrancher(
-		string $type,
-		Options $opt,
-		LoggerInterface $logger
-	) :Branch {
-		$class = __CLASS__ . "\\" . ucFirst( $type );
-		if ( !class_exists( $class ) ) {
-			throw new Exception( "$type is not a proper brancher!" );
-		}
-
-		return new $class(
-			$opt->getOpt( "old", 'master' ),
-			$opt->getOpt( 'branch-prefix', '' ),
-			$opt->getOpt( 'new' ),
-			$opt->getOpt( 'path', '' ),
-			$opt->getOpt( 'dryRun', true ),
-			$logger
-		);
-	}
 
 	/**
 	 * Get a directory where we can work.
@@ -180,8 +101,10 @@ abstract class Branch {
 
 	/**
 	 * Set up the build directory
+	 *
+	 * @return string dir
 	 */
-	abstract public function setupBuildDirectory() :void;
+	abstract public function setupBuildDirectory() :string;
 
 	/**
 	 * Get the config.json file to use for this branch type
@@ -189,6 +112,129 @@ abstract class Branch {
 	 * @return string
 	 */
 	abstract protected function getConfigJson( string $dir ) :string;
+
+	/**
+	 * Set up the options for the command line program
+	 */
+	public static function setupOptions( Options $opt ) {
+		$opt->setHelp( "Create Branches" );
+		$opt->setCommandHelp( "Specify one of the following branch styles:" );
+		$opt->setCompactHelp();
+
+		$types = self::getAvailableBranchTypes();
+		foreach ( $types as $name => $desc ) {
+			$opt->registerCommand( $name, $desc );
+		}
+
+		$opt->registerOption( 'new', 'New branch name.', 'n', 'name' );
+		$opt->registerOption(
+			'old', 'Old branch name. (default: master)', 'o', 'name'
+		);
+		$opt->registerOption( 'dry-run', 'Do everything but push.', 'd' );
+		$opt->registerOption(
+			'path', 'Path on Local disk from which to branch mediawiki-core.',
+			'p', 'path'
+		);
+		$opt->registerOption(
+			'continue-from', 'Extension from which to resume branching. Mainly '
+			. 'useful in the case where initial branching fails.', 'c',
+			'ext'
+		);
+		$opt->registerOption(
+			'keep-tmp', 'Whether to keep files in /tmp after finishing. '
+			. 'Default is to remove', 'k'
+		);
+	}
+
+	/**
+	 * Get the list of available branches.
+	 *
+	 * @return array
+	 */
+	public static function getAvailableBranchTypes() :array {
+		$finder = new Finder;
+		$iter = new ClassIterator( $finder->in( __DIR__ ) );
+		$thisClass = __CLASS__;
+		$ret = [];
+
+		foreach ( array_keys( $iter->getClassMap() ) as $classname ) {
+			if (
+				$classname !== $thisClass &&
+				get_parent_class( $classname ) === $thisClass
+			) {
+				$shortname = $classname::getShortname();
+				$desc = $classname::getDescription();
+				$ret[$shortname] = $desc;
+			}
+		}
+
+		return $ret;
+	}
+
+	/**
+	 * Factory of branches
+	 *
+	 * @param string $type of brancher to create
+	 * @param Options $opt the user gave
+	 * @return Wikimedia\Release\Branch
+	 */
+	public static function getBrancher(
+		string $type,
+		Options $opt,
+		LoggerInterface $logger
+	) {
+		if ( !$type ) {
+			return "Please specify a branch type!\n";
+		}
+
+		$class = __CLASS__ . "\\" . ucFirst( $type );
+		if ( !class_exists( $class ) ) {
+			return "$type is not a proper brancher!";
+		}
+
+		if ( !$opt->getOpt( 'new' ) ) {
+			return "'-n' or '--new' must be set.\n";
+		}
+		if ( !$opt->getCmd() ) {
+			return "Please provide a branch type.\n";
+		}
+
+		return new $class(
+			$opt->getOpt( "old", 'master' ),
+			$opt->getOpt( 'branch-prefix', '' ),
+			$opt->getOpt( 'new' ),
+			$opt->getOpt( 'path', '' ),
+			$opt->getOpt( 'dryRun', true ),
+			$opt->getOpt( 'branchFrom', 'master' ), // Should this just use old?
+			$logger
+		);
+	}
+
+	public function __construct(
+		string $oldVersion,
+		string $branchPrefix,
+		string $newVersion,
+		string $clonePath,
+		string $branchFrom,
+		bool $dryRun,
+		LoggerInterface $logger
+	) {
+		$this->oldVersion = $oldVersion;
+		$this->branchPrefix = $branchPrefix;
+		$this->newVersion = $newVersion;
+		$this->clonePath = $clonePath;
+		$this->logger = $logger;
+		$this->branchFrom = $branchFrom;
+
+		$this->repoPath = "";
+		$this->buildDir = "";
+		$this->noisy = false;
+		$this->branchedExtensions = [];
+		$this->branchedSubmodules = [];
+		$this->alreadyBranched = [];
+		$this->specialExtensions = [];
+		$this->control = new Control( $logger, $dryRun, $this );
+	}
 
 	/**
 	 * Set up the defaults for this branch type
@@ -214,17 +260,23 @@ abstract class Branch {
 
 		$this->repoPath = $repoPath;
 		$this->branchPrefix = $branchPrefix;
-		$this->dryRun = isset( $this->dryRun ) ?: $dryRun;
+		$this->dryRun = $this->dryRun ?? $dryRun;
 		$this->noisy = $noisy;
-		$this->clonePath = $this->clonePath ?: "{$this->repoPath}/core";
+		$this->clonePath = $this->clonePath ?? "{$this->repoPath}/core";
 		$this->buildDir = $buildDir;
 	}
 
-	protected function stupidSchemaCheck( string $text, array &$var, string $file ) :void {
-		foreach( [ 'extensions', 'submodules', 'special_extensions' ] as $key ) {
+	protected function stupidSchemaCheck(
+		string $text, array &$var, string $file
+	) :void {
+		foreach(
+			[ 'extensions', 'submodules', 'special_extensions' ] as $key
+		) {
 			if ( !isset( $var[$key] ) ) {
 				$var[$key] = [];
-				$this->logger->warning( "The $text '$key' is missing from $file" );
+				$this->logger->warning(
+					"The $text '$key' is missing from $file"
+				);
 			}
 		}
 	}
@@ -237,7 +289,7 @@ abstract class Branch {
 	protected function setBranchLists( string $dir ) :void {
 		$branchLists = [];
 		$configJson = $this->getConfigJson( $dir );
-		
+
 		if ( is_readable( $configJson ) ) {
 			$branchLists = json_decode(
 				file_get_contents( $configJson ),
@@ -253,35 +305,35 @@ abstract class Branch {
 			require $dir . '/local.conf';
 		}
 
-		$this->stupidSchemaCheck( 'index is null for', $branchLists, 'local.conf' );
+		$this->stupidSchemaCheck(
+			'index is null for', $branchLists, 'local.conf'
+		);
 
-		$this->branchedExtensions = $branchLists['extensions'] ?: [];
-		$this->branchedSubmodules = $branchLists['submodules'] ?: [];
-		$this->specialExtensions = $branchLists['special_extensions'] ?: [];
+		$this->branchedExtensions = $branchLists['extensions'] ?? [];
+		$this->branchedSubmodules = $branchLists['submodules'] ?? [];
+		$this->specialExtensions = $branchLists['special_extensions'] ?? [];
 	}
 
 	/**
-	 * Check that everything is ready.
+	 * Check that everything is up to date with origin
 	 *
 	 * @param string $dir
+	 * @param string $branch
 	 */
-	public function check( string $dir ) :void {
-		$cwd = getcwd();
-		$this->chdir( $dir );
+	public function check( string $dir, string $branch = "master" ) :void {
+		$this->control->chdir( $dir );
 
-		$current = trim( $this->cmdOut( 'git', 'symbolic-ref',  'HEAD' ) );
-		if ( $current === 'refs/heads/master' ) {
+		$current = $this->control->getCurrentBranch();
+		if ( $current === $branch ) {
 			$this->logger->notice(
 				"Verifying that make-branch is up to date with "
-				. "origin/master..."
+				. "origin/$branch..."
 			);
-			$this->cmd( 'git', 'fetch' );
-			$log = $this->cmdOut( 'git', 'log', 'HEAD..origin/master', '--pretty=oneline' );
-			$logsize = strlen( $log );
-			if ( $logsize > 0 ) {
+			$log = $this->control->getCurrentLogToOrigin( $branch );
+			if ( strlen( $log ) > 0 ) {
 				$this->croak(
 					"Out of date, you need to integrate these commits "
-					. "from origin/master:\n$log",
+					. "from origin/$branch:\n$log",
 				);
 			} else {
 				$this->logger->notice( "ok" );
@@ -289,16 +341,17 @@ abstract class Branch {
 		} else {
 			$this->croak(
 				"Wrong branch: $current. Please run this "
-				. "command from the latest master revision.",
+				. "command from the latest $branch revision.",
 			);
 		}
 
-		$changes = $this->cmdOut( 'git', 'status', '--porcelain' );
-		if ( $changes ) {
-			$this->logger->warning( "You have local changes in your tools/release checkout" );
+		if ( $this->control->hasChanges() ) {
+			$this->logger->warning(
+				"You have local changes in your tools/release checkout"
+			);
 		}
 
-		chdir($cwd);
+		$this->control->popdir();
 	}
 
 	/**
@@ -308,7 +361,7 @@ abstract class Branch {
 		// Best way to get the full path to the file being executed.
 		list( $arg0 ) = get_included_files();
 		$dir = dirname( $arg0 );
-		$this->check( $dir );
+		$this->check( $dir, "master" );
 		$this->setDefaults( $dir );
 		$this->setBranchLists( $dir );
 	}
@@ -356,118 +409,6 @@ abstract class Branch {
 	}
 
 	/**
-	 * Try to run a command and die if it fails
-	 *
-	 * @return integer exit code
-	 */
-	public function runCmd( /*...*/ ) :int {
-		$args = func_get_args();
-		if ( is_array( $args[0] ) ) {
-			$args = $args[0];
-		}
-
-		$attempts = 0;
-		do {
-			if ( $attempts ) {
-				$this->logger->info( "sleeping for 5s" );
-				sleep( 5 );
-			}
-			$ret = $this->cmd( $args );
-		} while ( $ret !== 0 && ++$attempts <= 5 );
-		return $ret;
-	}
-
-	/**
-	 * Run a command
-	 *
-	 * return int (exit code)
-	 */
-	public function cmd( /*...*/ ) :int {
-		$args = func_get_args();
-		if ( is_array( $args[0] ) ) {
-			$args = $args[0];
-		}
-
-		$this->logger->notice( implode( ' ', $args ) );
-
-		$loop = LoopFactory::create();
-		$proc = new StreamProcess(
-			implode( ' ', array_map( 'escapeshellarg', $args ) )
-		);
-
-		$loop->addReadStream(
-			$proc->getReadStream(),
-			/** @param resource $stream */
-			function ( $stream ) use ( $loop ) :void {
-				$out = fgets( $stream );
-				if ( $out !== false ) {
-					if ( $this->storeOutput ) {
-						$this->output .= $out;
-					}
-					$this->logger->info( $out );
-				} else {
-					$loop->stop();
-				}
-			}
-		);
-		$loop->addReadStream(
-			$proc->getErrorStream(),
-			/** @param resource $stream */
-			function ( $stream ) :void {
-				$out = fgets( $stream );
-				if ( $out !== false ) {
-					$this->logger->warning( $out );
-				}
-			}
-		);
-
-		$loop->run();
-		return $proc->close();
-	}
-
-	/**
-	 * Return what the command sends to stdout instead of just
-	 * printing it. Stderr is still printed.
-	 *
-	 * @return string
-	 */
-	public function cmdOut( /*...*/ ) :string {
-		$this->storeOutput = true;
-		$this->output = '';
-		$this->cmd( func_get_args() );
-		$this->storeOutput = false;
-		return $this->output;
-	}
-
-	/**
-	 * Conditionally (if not a dry run) run a command.
-	 *
-	 * @return int
-	 */
-	public function runWriteCmd( /*...*/ ) :int {
-		$args = func_get_args();
-		$ret = 0;
-		if ( $this->dryRun ) {
-			$this->logger->notice( "[dry-run] " . implode( ' ', $args ) );
-		} else {
-			$ret = $this->runCmd( $args );
-		}
-		return $ret;
-	}
-
-	/**
-	 * Change dir or die if there is a problem.
-	 *
-	 * @param string $dir
-	 */
-	public function chdir( string $dir ) :void {
-		if ( !chdir( $dir ) ) {
-			$this->croak( "Unable to change working directory" );
-		}
-		$this->logger->notice( "cd $dir" );
-	}
-
-	/**
 	 * Print an error and die
 	 *
 	 * @param string $msg
@@ -481,14 +422,14 @@ abstract class Branch {
 	 * Entry point to branching
 	 */
 	public function execute() :void {
-		$this->setupBuildDirectory();
+		$this->control->chdir( $this->setupBuildDirectory() );
 		foreach ( $this->branchedExtensions as $ext ) {
 			$this->branchRepo( $ext );
 		}
 		foreach ( $this->specialExtensions as $ext => $branch ) {
 			$this->branchRepo( $ext, $branch );
 		}
-		$this->branch();
+		$this->branch( $this->branchFrom );
 	}
 
 	/**
@@ -497,12 +438,35 @@ abstract class Branch {
 	 * @param string $branchName
 	 */
 	public function createBranch( string $branchName ) :void {
-		$ret = $this->runCmd( 'git', 'checkout', '-b', $branchName );
+		$ret = $this->control->runCmd( 'git', 'checkout', '-b', $branchName );
 		if ( $ret === 0 ) {
-			$ret = $this->runWriteCmd( 'git', 'push', 'origin', $branchName );
+			$ret = $this->control->runWriteCmd( 'git', 'push', 'origin', $branchName );
 		}
 		if ( $ret !== 0 ) {
 			$this->croak( "Problem creating branch!" );
+		}
+	}
+
+	/**
+	 * Clone a repository into a new dir or update it
+	 *
+	 * @param string $repo dir to put things
+	 * @param string $repoPath to clone from
+	 * @param string $branch
+	 */
+	public function cloneOrUpdate(
+		string $repo,
+		string $repoPath,
+		string $branch = 'master'
+	) :void {
+		if ( $this->control->isGitDir( $repo, $repoPath ) ) {
+			$this->control->pull( $repo );
+		} elseif ( !file_exists( $repo ) ) {
+			$this->control->clone( $repo, $repoPath, $branch );
+		} else {
+			$this->croak(
+				"Something is in the way, cannot update or checkout $repo!"
+			);
 		}
 	}
 
@@ -512,126 +476,75 @@ abstract class Branch {
 	 * @param string $path where the git checkout is
 	 * @param string $branch
 	 */
-	public function branchRepo( string $path, string $branch = 'master' ) :void {
+	public function branchRepo(
+		string $path,
+		string $branch = 'master'
+	) :void {
 		$repo = basename( $path );
+		$repoPath = "{$this->repoPath}/{$path}";
 
 		// repo has already been branched, so just bail out
 		if ( isset( $this->alreadyBranched[$repo] ) ) {
 			return;
 		}
 
-		$ret = $this->runCmd(
-			'git', 'clone', '--branch', $branch, '--depth', '1',
-			"{$this->repoPath}/{$path}", $repo
-		);
-		if ( $ret !== 0 ) {
-			$this->croak( "Problem creating branch ($branch) on repo ($repo)!" );
-		}
-
-		$this->chdir( $repo );
+		$this->cloneOrUpdate( $repo, $repoPath, $branch );
+		$this->control->chdir( $repo );
 
 		if ( isset( $this->branchedSubmodules[$path] ) ) {
 			foreach ( (array)$this->branchedSubmodules[$path] as $submodule ) {
-				$ret = $this->runCmd(
-					'git', 'submodule', 'update', '--init', $submodule
-				);
-				if ( $ret !== 0 ) {
-					$this->croak( "Problem creating with submodule ($submodule)!" );
-				}
-				$this->chdir( $submodule );
+				$this->control->initSubmodule( $submodule );
+				$this->control->chdir( $submodule );
 				$this->createBranch( $this->newVersion );
-				// Get us back to the repo directory by first going to
-				// the build directory, then into the repo from
-				// there. chdir( '..' ) doesn't work because the
-				// submodule may be inside a subdirectory
-				$this->chdir( $this->buildDir );
-				$this->chdir( $repo );
+				$this->control->popdir();
 			}
 		}
 		$this->createBranch( $this->newVersion );
-		$this->chdir( $this->buildDir );
-	}
-
-	/**
-	 * Handle cloning to a particular destination
-	 *
-	 * @param string $oldVersion
-	 * @param string $dest
-	 */
-	public function cloneAndEnterDest( $oldVersion, $dest ) :void {
-		$ret = false;
-		AtEase::suppressWarnings();
-		if ( lstat( $dest ) !== false ) {
-			AtEase::restoreWarnings();
-			$this->logger->warning( "Destination ($dest) already exists, not cloning" );
-		} else {
-			AtEase::restoreWarnings();
-			$ret = $this->runCmd(
-				'git', 'clone', $this->clonePath, '-b', $oldVersion, $dest
-			);
-			if ( $ret === 0 ) {
-				$this->chdir( $dest );
-				$ret = $this->runCmd(
-					'git', 'remote', 'set-url', 'origin', $this->getRepoPath()
-				);
-			}
-		}
-
-		if ( $ret ) {
-			$this->croak( "Please fix the problems before continuing" );
-		}
+		$this->control->popdir();
 	}
 
 	/**
 	 * Create (if necessary) or pull from remote a branch and switch to it.
 	 */
-	public function createAndUseNew( ) :void {
-		$remoteNewVersion = 'origin/' . $this->newVersion;
-		$onBranch = trim(
-			$this->cmdOut( 'git', 'rev-parse', '--abbrev-ref', 'HEAD' )
-		);
-		$localBranches = explode(
-			"\n", trim(
-				$this->cmdOut( 'git', 'for-each-ref', '--format=%(refname:short)',
-							  'refs/heads/' ) )
-		);
+	public function createAndUseNew() :void {
+		$onBranch = $this->control->getCurrentBranch();
+		$localBranches = $this->control->getLocalBranches();
+
 		$hasLocalBranch = in_array( $this->newVersion, $localBranches );
-		$hasRemoteBranch = $this->cmd(
-			'git', 'ls-remote', '--exit-code', '--heads', $this->clonePath, $this->newVersion
-		) !== 2;
-		$tracking = trim(
-			$this->cmdOut( 'git', 'for-each-ref', '--format=%(upstream:short)',
-					   'refs/heads/' . $this->newVersion
-			)
+		$hasRemoteBranch = $this->control->hasRemoteBranch(
+			$this->clonePath, $this->newVersion
 		);
+
+		$tracking = $this->control->getTrackingBranch( $this->newVersion );
+		$remoteNewVersion = 'origin/' . $this->newVersion;
 		$localTracksRemote = $tracking === $remoteNewVersion;
 
-		$ret = true;
 		if ( $hasRemoteBranch && !$hasLocalBranch ) {
-			$this->logger->warning( "Remote already has {$this->newVersion}. Using that" );
-			$ret = $this->cmd( 'git', 'checkout', $this->newVersion );
-		} elseif ( $onBranch === $this->newVersion && $hasRemoteBranch && $localTracksRemote ) {
+			$this->logger->warning( "Remote already has {$this->newVersion}. "
+								  . "Using that." );
+			$this->control->checkout( $this->newVersion );
+		} elseif (
+			$onBranch === $this->newVersion &&
+			$hasRemoteBranch &&
+			$localTracksRemote
+		) {
 			$this->logger->warning(
 				"Already on local branch that tracks remote."
 			);
-			$ret = $this->cmd( 'git', 'pull' );
-		} elseif ( $onBranch !== $this->newVersion && $hasLocalBranch && $localTracksRemote ) {
+			$this->control->pull();
+		} elseif (
+			$onBranch !== $this->newVersion &&
+			$hasLocalBranch &&
+			$localTracksRemote
+		) {
 			$this->logger->warning(
 				"Already have local branch. Switching to that and updating"
 			);
-			$this->cmd( 'git', 'checkout', $this->newVersion );
-			$ret = $this->cmd( 'git', 'pull' );
+			$this->control->checkout( $this->newVersion );
+			$this->control->pull();
 		} elseif ( !$hasLocalBranch ) {
-			# Create a new branch from master and switch to it
-			$ret = $this->cmd( 'git', 'checkout', '-b', $this->newVersion, 'origin/master' );
-			if ( !$ret ) {
-				$ret = $this->cmd(
-					'git', 'remote', 'set-url', 'origin', $this->clonePath
-				);
-			}
-		}
-		if ( $ret ) {
-			$this->croak( "Please fix the problems before continuing" );
+			$this->checkoutNewBranch( $this->newVersion );
+			$this->setOrigin( $this->clonePath );
 		}
 	}
 
@@ -642,15 +555,18 @@ abstract class Branch {
 		# Fix $wgVersion
 		if ( $this->fixVersion( "includes/DefaultSettings.php" ) ) {
 			# Do intermediate commit
-			$ret = $this->runCmd(
+			$ret = $this->control->runCmd(
 				'git', 'commit', '-a', '-m',
-				"Creating new " . $this->getShortname() . " {$this->newVersion} branch"
+				"Creating new " . $this->getShortname()
+				. " {$this->newVersion} branch"
 			);
 			if ( $ret !== 0 ) {
 				$this->croak( "Intermediate commit failed!" );
 			}
 		} else {
-			$this->logger->warning( '$wgVersion already updated, but continuing anyway' );
+			$this->logger->warning(
+				'$wgVersion already updated, but continuing anyway'
+			);
 		}
 	}
 
@@ -660,7 +576,7 @@ abstract class Branch {
 	public function handleSubmodules() :void {
 		# Add extensions/skins/vendor
 		foreach ( $this->branchedExtensions as $name ) {
-			$ret = $this->runCmd(
+			$ret = $this->control->runCmd(
 				'git', 'submodule', 'add', '-f', '-b', $this->newVersion,
 				"{$this->repoPath}/{$name}", $name
 			);
@@ -671,7 +587,7 @@ abstract class Branch {
 
 		# Add extension submodules
 		foreach ( array_keys( $this->specialExtensions ) as $name ) {
-			$ret = $this->runCmd(
+			$ret = $this->control->runCmd(
 				'git', 'submodule', 'add', '-f', '-b', $this->newVersion,
 				"{$this->repoPath}/{$name}", $name
 			);
@@ -683,11 +599,13 @@ abstract class Branch {
 
 	/**
 	 * Push the branch
+	 *
+	 * @param string $branchName
 	 */
-	public function branch() :void {
+	public function branch( string $branchName ) :void {
 		# Clone the repository
-		$oldVersion = $this->oldVersion === 'master'
-					? 'master'
+		$oldVersion = $this->oldVersion === $branchName
+					? $branchName
 					: $this->branchPrefix . $this->oldVersion;
 		$dest = $this->getBranchDir();
 
@@ -696,9 +614,10 @@ abstract class Branch {
 		$this->handleSubmodules();
 		$this->handleVersionUpdate();
 
-		$this->runWriteCmd(
-			'git', 'push', '-u', 'origin', $this->getBranchPrefix() . $this->newVersion
+		$this->control->pushRemote(
+			$this->getBranchPrefix() . $this->newVersion
 		);
+
 	}
 
 	/**
@@ -722,7 +641,9 @@ abstract class Branch {
 			if ( $ret === false ) {
 				$this->croak( "Error writing $fileName" );
 			}
-			$this->logger->info( "Replaced $count instance of wgVersion in $fileName" );
+			$this->logger->info(
+				"Replaced $count instance of wgVersion in $fileName"
+			);
 		}
 
 		if ( $count === 0 ) {
