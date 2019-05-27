@@ -72,7 +72,7 @@ class Wmf extends Branch {
 	 */
 	public function teardownBuildDirectory() :void {
 		if ( file_exists( $this->buildDir ) ) {
-			$this->runCmd( 'rm', '-rf', '--', $this->buildDir );
+			$this->control->rmdir( $this->buildDir );
 		}
 	}
 }

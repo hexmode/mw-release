@@ -324,11 +324,19 @@ class Control {
 	/**
 	 * Checkout a new branch
 	 * @param string $branch
+	 * @param string $sourceBranch
 	 */
-	public function checkoutNewBranch( string $branch ) :void {
-		$this->cmd(
-			'git', 'checkout', '-b', $branch, 'origin/master'
-		);
+	public function checkoutNewBranch(
+		string $branch,
+		string $sourceBranch = null
+	) :void {
+		if ( $this->cmd(
+			'git', 'checkout', '-b', $branch, $sourceBranch
+		) ) {
+			$this->croak(
+				"Failed checkout branch ($branch) from origin/master!"
+			);
+		}
 	}
 
 	/**
@@ -375,9 +383,9 @@ class Control {
 	 * @param $remoteName
 	 */
 	public function pushRemote( $remoteName ) :void {
-		if (
-			$this->runWriteCmd( 'git', 'push', '-u', 'origin', $remoteName )
-		) {
+		if ( $this->runWriteCmd(
+				 'git', 'push', '-u', 'origin', $remoteName
+		) ) {
 			$this->croak( "Problems pushing to origin!" );
 		}
 	}
@@ -394,13 +402,60 @@ class Control {
 		string $repoPath,
 		string $branch = 'master'
 	) :void {
-		$ret = $this->cmd(
+		if ( $this->cmd(
 			'git', 'clone', '--branch', $branch, '--depth', 1, $repoPath, $repo
-		);
-		if ( $ret !== 0 ) {
+		) ) {
 			$this->croak(
 				"Problem creating branch ($branch) on repo ($repo)!"
 			);
 		}
 	}
+
+	/**
+	 * Remove a directory
+	 *
+	 * @param string $dir
+	 */
+	public function rmdir( string $dir ) :void {
+		if ( $this->runCmd( 'rm', '-rf', '--', $dir ) ) {
+			$this->croak( "Problem removing $dir!" );
+		}
+	}
+
+	/**
+	 * Add a submodule to the current git repo
+	 *
+	 * @param string $branch to use for submodule
+	 * @param string $repo to use as the remote
+	 * @param string $dir relative to root of current repo
+	 */
+	public function addSubmodule(
+		string $branch,
+		string $repo,
+		string $dir
+	) {
+		if (
+			$this->runCmd(
+				'git', 'submodule', 'add', '-f', '-b', $branch, $repo,
+				$dir
+			)
+		) {
+			$this->croak( "Adding submodule from repository ($repo) failed!" );
+		}
+	}
+
+	/**
+	 * Push branch to remote.
+	 *
+	 * @param string $remote
+	 * @param string $branch
+	 */
+	public function push( string $remote, string $branch ) :void {
+		if ( $this->control->runWriteCmd( 'git', 'push', $remote, $branch ) ) {
+			$this->croak(
+				"Couldn't push branch ($branch) to remote ($remote)!"
+			);
+		}
+	}
+
 }

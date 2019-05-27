@@ -438,13 +438,8 @@ abstract class Branch {
 	 * @param string $branchName
 	 */
 	public function createBranch( string $branchName ) :void {
-		$ret = $this->control->runCmd( 'git', 'checkout', '-b', $branchName );
-		if ( $ret === 0 ) {
-			$ret = $this->control->runWriteCmd( 'git', 'push', 'origin', $branchName );
-		}
-		if ( $ret !== 0 ) {
-			$this->croak( "Problem creating branch!" );
-		}
+		$this->control->checkoutNewBranch( $branchName );
+		$this->control->push( 'origin', $branchName );
 	}
 
 	/**
@@ -543,7 +538,7 @@ abstract class Branch {
 			$this->control->checkout( $this->newVersion );
 			$this->control->pull();
 		} elseif ( !$hasLocalBranch ) {
-			$this->checkoutNewBranch( $this->newVersion );
+			$this->control->checkoutNewBranch( $this->newVersion, "origin/master" );
 			$this->setOrigin( $this->clonePath );
 		}
 	}
@@ -576,13 +571,9 @@ abstract class Branch {
 	public function handleSubmodules() :void {
 		# Add extensions/skins/vendor
 		foreach ( $this->branchedExtensions as $name ) {
-			$ret = $this->control->runCmd(
-				'git', 'submodule', 'add', '-f', '-b', $this->newVersion,
+			$this->control->addSubmodule(
 				"{$this->repoPath}/{$name}", $name
 			);
-			if ( $ret !== 0 ) {
-				$this->croak( "Adding submodule ($name) failed!" );
-			}
 		}
 
 		# Add extension submodules
