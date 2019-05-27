@@ -605,8 +605,8 @@ abstract class Branch {
 		$this->handleSubmodules();
 		$this->handleVersionUpdate();
 
-		$this->control->pushRemote(
-			$this->getBranchPrefix() . $this->newVersion
+		$this->control->push(
+			"origin", $this->getBranchPrefix() . $this->newVersion
 		);
 
 	}

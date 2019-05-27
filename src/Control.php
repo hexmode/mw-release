@@ -213,7 +213,6 @@ class Control {
 	 * @param string $dest
 	 */
 	public function cloneAndEnterDest( $oldVersion, $dest ) :void {
-		$ret = false;
 		AtEase::suppressWarnings();
 		if ( lstat( $dest ) !== false ) {
 			AtEase::restoreWarnings();
@@ -225,11 +224,9 @@ class Control {
 			$this->clone( $dest, $this->clonePath, $oldVersion );
 		}
 		$this->chdir( $dest );
-		$ret = $this->runCmd(
+		if ( $this->runCmd(
 			'git', 'remote', 'set-url', 'origin', $this->getRepoPath()
-		);
-
-		if ( $ret !== 0 ) {
+		) ) {
 			$this->croak( "Please fix the problems before continuing" );
 		}
 	}
@@ -240,8 +237,9 @@ class Control {
 	 * @param string $submodule
 	 */
 	public function initSubmodule( string $submodule ) :void {
-		$ret = $this->cmd( 'git', 'submodule', 'update', '--init', $submodule );
-		if ( $ret !== 0 ) {
+		if ( $this->cmd(
+				 'git', 'submodule', 'update', '--init', $submodule
+		) ) {
 			$this->croak(
 				"Problem creating with submodule ($submodule)!"
 			);
@@ -279,6 +277,15 @@ class Control {
 	 * @return bool
 	 */
 	public function hasRemoteBranch( string $repoUrl, string $branch ) :bool {
+		/**
+		 *  From manpage for git-ls-remote:
+		 *
+		 *   --exit-code
+         * Exit with status "2" when no matching refs are found in
+         * the remote repository. Usually the command exits with
+         * status "0" to indicate it successfully talked with the
+         * remote repository, whether it found any matching refs.
+		 */
 		return $this->cmd(
 			'git', 'ls-remote', '--exit-code', '--heads', $repoUrl, $branch
 		) !== 2;
@@ -292,8 +299,8 @@ class Control {
 	 */
 	public function getTrackingBranch( string $branch ) :string {
 		return $this->cmdOut(
-			'git', 'for-each-ref', '--format=%(upstream:short)', 'refs/heads/'
-			. $branch
+			'git', 'for-each-ref', '--format=%(upstream:short)',
+			"refs/heads/$branch"
 		);
 	}
 
@@ -330,9 +337,11 @@ class Control {
 		string $branch,
 		string $sourceBranch = null
 	) :void {
-		if ( $this->cmd(
-			'git', 'checkout', '-b', $branch, $sourceBranch
-		) ) {
+		$cmd = [ 'git', 'checkout', '-b', $branch ];
+		if ( $sourceBranch !== null ) {
+			$cmd[] = $sourceBranch;
+		}
+		if ( $this->cmd( $cmd ) ) {
 			$this->croak(
 				"Failed checkout branch ($branch) from origin/master!"
 			);
@@ -457,5 +466,4 @@ class Control {
 			);
 		}
 	}
-
 }
