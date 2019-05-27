@@ -90,7 +90,7 @@ class Control {
 			$args = $args[0];
 		}
 
-		$this->logger->debug( implode( ' ', $args ) );
+		$this->logger->debug( "$ " . implode( ' ', $args ) );
 
 		$loop = LoopFactory::create();
 		$proc = new StreamProcess(
@@ -163,7 +163,7 @@ class Control {
 		$args = func_get_args();
 		$ret = 0;
 		if ( $this->dryRun ) {
-			$this->logger->notice( "[dry-run] " . implode( ' ', $args ) );
+			$this->logger->debug( "[dry-run] " . implode( ' ', $args ) );
 		} else {
 			$ret = $this->runCmd( $args );
 		}
@@ -184,7 +184,7 @@ class Control {
 		if ( !chdir( $dir ) ) {
 			$this->croak( "Unable to change working directory to $dir" );
 		}
-		$this->logger->debug( "cd $dir" );
+		$this->logger->debug( "$ cd $dir" );
 	}
 
 	/**
@@ -195,6 +195,7 @@ class Control {
 		if ( !chdir( $dir ) ) {
 			$this->croak( "Unable to return to the $dir directory" );
 		}
+		$this->logger->debug( "$ cd $dir" );
 	}
 
 	/**
@@ -276,11 +277,11 @@ class Control {
 	 * @return array
 	 */
 	public function getLocalBranches() :array {
-		return explode(
+		return array_flip( explode(
 			"\n", $this->cmdOut(
 				'git', 'for-each-ref', '--format=%(refname:short)',
 				'refs/heads/'
-			)
+			) )
 		);
 	}
 
@@ -352,14 +353,27 @@ class Control {
 		string $branch,
 		string $sourceBranch = null
 	) :void {
-		$cmd = [ 'git', 'checkout', '-b', $branch ];
-		if ( $sourceBranch !== null ) {
-			$cmd[] = $sourceBranch;
-		}
-		if ( $this->cmd( $cmd ) ) {
-			$this->croak(
-				"Failed checkout branch ($branch) from origin/master!"
+		if ( $this->getCurrentBranch() === $branch ) {
+			$this->logger->warning(
+				"Already on branch ($branch).  Using it."
 			);
+		} elseif ( !$this->hasLocalBranch( $branch ) ) {
+			$cmd = [ 'git', 'checkout', '-b', $branch ];
+			$fromBranch = "";
+			if ( $sourceBranch !== null ) {
+				$cmd[] = $sourceBranch;
+				$fromBranch = " from $sourceBranch";
+			}
+			if ( $this->cmd( $cmd ) ) {
+				$this->croak(
+					"Failed to check out branch ($branch)$fromBranch!"
+				);
+			}
+		} else {
+			$this->logger->warning(
+				"Using already existing branch ($branch) instead of a new one."
+			);
+			$this->checkout( $branch );
 		}
 	}
 
@@ -475,7 +489,7 @@ class Control {
 	 * @param string $branch
 	 */
 	public function push( string $remote, string $branch ) :void {
-		if ( $this->control->runWriteCmd( 'git', 'push', $remote, $branch ) ) {
+		if ( $this->runWriteCmd( 'git', 'push', $remote, $branch ) ) {
 			$this->croak(
 				"Couldn't push branch ($branch) to remote ($remote)!"
 			);
@@ -490,9 +504,9 @@ class Control {
 	 */
 	public function hasLocalBranch( string $branchName ) :bool {
 		if ( $this->localBranches === null ) {
-			$this->localBranches = $this->control->getLocalBranches();
+			$this->localBranches = $this->getLocalBranches();
 		}
 
-		return in_array( $branchName, $this->localBranches );
+		return isset( $this->localBranches[ $branchName ] );
 	}
 }
