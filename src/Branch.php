@@ -274,7 +274,7 @@ abstract class Branch {
 		) {
 			if ( !isset( $var[$key] ) ) {
 				$var[$key] = [];
-				$this->logger->warning(
+				$this->logger->notice(
 					"The $text '$key' is missing from $file"
 				);
 			}
@@ -344,10 +344,11 @@ abstract class Branch {
 				. "command from the latest $branch revision.",
 			);
 		}
-
-		if ( $this->control->hasChanges() ) {
-			$this->logger->warning(
-				"You have local changes in your tools/release checkout"
+		$changes = $this->control->getChanges();
+		if ( $changes ) {
+			$this->logger->notice(
+				"You have local changes in your tools/release checkout:\n"
+				. $changes
 			);
 		}
 
@@ -511,15 +512,16 @@ abstract class Branch {
 		$localTracksRemote = $tracking === 'origin/' . $this->newVersion;
 
 		if ( $hasRemoteBranch && !$hasLocalBranch ) {
-			$this->logger->warning( "Remote already has {$this->newVersion}. "
-								  . "Using that." );
+			$this->logger->notice(
+				"Remote already has {$this->newVersion}. Using that."
+			);
 			$this->control->checkout( $this->newVersion );
 		} elseif (
 			$onBranch === $this->newVersion &&
 			$hasRemoteBranch &&
 			$localTracksRemote
 		) {
-			$this->logger->warning(
+			$this->logger->notice(
 				"Already on local branch that tracks remote."
 			);
 			$this->control->pull();
@@ -528,7 +530,7 @@ abstract class Branch {
 			$hasLocalBranch &&
 			$localTracksRemote
 		) {
-			$this->logger->warning(
+			$this->logger->notice(
 				"Already have local branch. Switching to that and updating"
 			);
 			$this->control->checkout( $this->newVersion );
@@ -555,7 +557,7 @@ abstract class Branch {
 				$this->croak( "Intermediate commit failed!" );
 			}
 		} else {
-			$this->logger->warning(
+			$this->logger->notice(
 				'$wgVersion already updated, but continuing anyway'
 			);
 		}
@@ -628,7 +630,7 @@ abstract class Branch {
 			if ( $ret === false ) {
 				$this->croak( "Error writing $fileName" );
 			}
-			$this->logger->info(
+			$this->logger->notice(
 				"Replaced $count instance of wgVersion in $fileName"
 			);
 		}

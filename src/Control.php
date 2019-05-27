@@ -71,7 +71,7 @@ class Control {
 		$attempts = 0;
 		do {
 			if ( $attempts ) {
-				$this->logger->info( "sleeping for 5s" );
+				$this->logger->warning( "sleeping for 5s" );
 				sleep( 5 );
 			}
 			$ret = $this->cmd( $args );
@@ -90,7 +90,7 @@ class Control {
 			$args = $args[0];
 		}
 
-		$this->logger->notice( implode( ' ', $args ) );
+		$this->logger->debug( implode( ' ', $args ) );
 
 		$loop = LoopFactory::create();
 		$proc = new StreamProcess(
@@ -106,7 +106,7 @@ class Control {
 					if ( $this->storeOutput ) {
 						$this->output .= $out;
 					}
-					$this->logger->info( $out );
+					$this->logger->debug( $out );
 				} else {
 					$loop->stop();
 				}
@@ -142,6 +142,19 @@ class Control {
 	}
 
 	/**
+	 * Like cmdOut, but the output isn't put through trim.
+	 *
+	 * @return string
+	 */
+	public function cmdOutNoTrim( /*...*/ ) :string {
+		$this->storeOutput = true;
+		$this->output = '';
+		$this->cmd( func_get_args() );
+		$this->storeOutput = false;
+		return $this->output;
+	}
+
+	/**
 	 * Conditionally (if not a dry run) run a command.
 	 *
 	 * @return int
@@ -171,7 +184,7 @@ class Control {
 		if ( !chdir( $dir ) ) {
 			$this->croak( "Unable to change working directory to $dir" );
 		}
-		$this->logger->notice( "cd $dir" );
+		$this->logger->debug( "cd $dir" );
 	}
 
 	/**
@@ -218,7 +231,7 @@ class Control {
 		AtEase::suppressWarnings();
 		if ( lstat( $dest ) !== false ) {
 			AtEase::restoreWarnings();
-			$this->logger->warning(
+			$this->logger->debug(
 				"Destination ($dest) already exists, not cloning"
 			);
 		} else {
@@ -379,13 +392,13 @@ class Control {
 	}
 
 	/**
-	 * Return true if the local checkout has any changes that need to
+	 * Return the output of git status --porcelain
 	 * be dealt with
 	 *
-	 * @return bool
+	 * @return string
 	 */
-	public function hasChanges() :bool {
-		return strlen( $this->cmdOut( 'git', 'status', '--porcelain' ) ) > 0;
+	public function getChanges() :string {
+		return $this->cmdOutNoTrim( 'git', 'status', '--porcelain' );
 	}
 
 	/**
