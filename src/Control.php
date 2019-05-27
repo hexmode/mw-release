@@ -41,6 +41,8 @@ class Control {
 	protected $storeOutput;
 	/** @var Branch */
 	protected $brancher;
+	/** @var array */
+	protected $localBranches;
 
 	public function __construct(
 		LoggerInterface $logger,
@@ -465,5 +467,19 @@ class Control {
 				"Couldn't push branch ($branch) to remote ($remote)!"
 			);
 		}
+	}
+
+	/**
+	 * True if the local git checkout has the branch
+	 *
+	 * @param string $branchName
+	 * @return bool
+	 */
+	public function hasLocalBranch( string $branchName ) :bool {
+		if ( $this->localBranches === null ) {
+			$this->localBranches = $this->control->getLocalBranches();
+		}
+
+		return in_array( $branchName, $this->localBranches );
 	}
 }

@@ -503,16 +503,12 @@ abstract class Branch {
 	 */
 	public function createAndUseNew() :void {
 		$onBranch = $this->control->getCurrentBranch();
-		$localBranches = $this->control->getLocalBranches();
-
-		$hasLocalBranch = in_array( $this->newVersion, $localBranches );
+		$hasLocalBranch = $this->control->hasLocalBranch( $this->newVersion );
 		$hasRemoteBranch = $this->control->hasRemoteBranch(
 			$this->clonePath, $this->newVersion
 		);
-
 		$tracking = $this->control->getTrackingBranch( $this->newVersion );
-		$remoteNewVersion = 'origin/' . $this->newVersion;
-		$localTracksRemote = $tracking === $remoteNewVersion;
+		$localTracksRemote = $tracking === 'origin/' . $this->newVersion;
 
 		if ( $hasRemoteBranch && !$hasLocalBranch ) {
 			$this->logger->warning( "Remote already has {$this->newVersion}. "
