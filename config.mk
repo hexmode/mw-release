@@ -56,12 +56,29 @@ export fetchSubmodules
 releaseVer ?= ---
 export releaseVer
 
+# The previous minor version
+prevMinorVer ?= -1
+export prevMinorVer
+
+# The previous major version
+prevMajorVer ?= -1
+export prevMajorVer
+
 majorReleaseVer=$(strip $(if $(filter-out ---,${releaseVer}),				\
 	$(shell echo ${releaseVer} | cut -d . -f 1).$(shell 					\
 	echo ${releaseVer} | cut -d . -f 2),---))
 
-thisMinorVer=$(strip $(if $(filter-out ---,${releaseVer}),					\
+# This minor version
+thisMinorVer ?= $(strip $(if $(filter-out ---,${releaseVer}),				\
 	$(shell echo ${releaseVer} | cut -d . -f 3),---))
+export thisMinorVer
+
+isReleaseCandidate ?= $(if $(filter %-rc,${thisMinorVer}),true,)
+
+ifeq (${isReleaseCandidate},true)
+	thisMinorVer=0
+endif
+
 prevMajorVer=${majorReleaseVer}
 ifeq "${thisMinorVer}" "---"
 	prevMinorVer=-1
@@ -70,8 +87,10 @@ else
 endif
 
 # The version to diff against
-prevReleaseVer=$(if $(subst ---,,${majorReleaseVer})						\
+prevReleaseVer ?= $(if $(subst ---,,${majorReleaseVer})						\
 	,${majorReleaseVer}.${prevMinorVer},---)
+export prevReleaseVer
+
 # Is thisMinorVer a zero
 ifeq "${thisMinorVer}${prevMinorVer}" "0-1"
 	# Fine, find the previous version by fetching the list of
