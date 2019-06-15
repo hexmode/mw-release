@@ -14,6 +14,7 @@
 		"splitbrain/php-cli": "dev-compact-help",
 		"psr/log": "^1.1",
 		"hanneskod/classtools": "^1.2",
+		"hexmode/php-gerrit": "dev-master",
 		"wikimedia/at-ease": "^2.0",
 		"christiaan/stream-process": "^1.0",
 		"react/event-loop": "^1.1"

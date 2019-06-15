@@ -136,9 +136,9 @@ abstract class Branch {
 			'p', 'path'
 		);
 		$opt->registerOption(
-			'continue-from', 'Extension from which to resume branching. Mainly '
-			. 'useful in the case where initial branching fails.', 'c',
-			'ext'
+			'continue-from', 'Extension from which to resume branching. '
+			. 'Mainly useful in the case where initial branching fails.',
+			'c', 'ext'
 		);
 		$opt->registerOption(
 			'keep-tmp', 'Whether to keep files in /tmp after finishing. '
