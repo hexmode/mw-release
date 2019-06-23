@@ -32,7 +32,7 @@ class Wmf extends Branch {
 		return 'Create a WMF Branch';
 	}
 
-	protected function getWorkDir() :string {
+	public function getWorkDir() :string {
 		return sys_get_temp_dir() . '/make-wmf-branch';
 	}
 
@@ -40,7 +40,7 @@ class Wmf extends Branch {
 		return "wmf/";
 	}
 
-	protected function getRepoPath() :string {
+	public function getRepoPath() :string {
 		return 'https://gerrit.wikimedia.org/r/mediawiki';
 	}
 

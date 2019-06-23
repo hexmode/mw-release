@@ -10,14 +10,20 @@
 		}
 	],
 	"require": {
-		"php": ">=7.0",
-		"splitbrain/php-cli": "dev-compact-help",
+		"php": ">=7.3",
+		"splitbrain/php-cli": "dev-master",
 		"psr/log": "^1.1",
 		"hanneskod/classtools": "^1.2",
 		"hexmode/php-gerrit": "dev-master",
 		"wikimedia/at-ease": "^2.0",
 		"christiaan/stream-process": "^1.0",
 		"react/event-loop": "^1.1"
+	},
+	"require-dev": {
+		"vimeo/psalm": "^3.2",
+		"mediawiki/mediawiki-codesniffer": "dev-master",
+		"jakub-onderka/php-parallel-lint": "dev-master",
+		"felixfbecker/language-server": "dev-master"
 	},
 	"autoload": {
 		"psr-4": {
@@ -28,11 +34,15 @@
 		{
 			"type": "vcs",
 			"url": "https://github.com/hexmode/php-cli"
+		},
+		{
+			"type": "vcs",
+			"url": "https://github.com/hexmode/netrc"
+		},
+		{
+			"type": "vcs",
+			"url": "https://github.com/hexmode/http-basic-auth"
 		}
 	],
-	"require-dev": {
-		"vimeo/psalm": "^3.2",
-		"felixfbecker/language-server": "dev-master"
-	},
 	"minimum-stability": "dev"
 }

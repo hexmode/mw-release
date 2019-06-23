@@ -25,6 +25,7 @@ use Exception;
 use hanneskod\classtools\Iterator\ClassIterator;
 use Psr\Log\LoggerInterface;
 use splitbrain\phpcli\Options;
+use splitbrain\phpcli\UsageException as Usage;
 use Symfony\Component\Finder\Finder;
 
 abstract class Branch {
@@ -56,6 +57,8 @@ abstract class Branch {
 	protected $control;
 	/** @var string */
 	protected $branchFrom;
+	/** @var bool */
+	protected $dryRun;
 
 	/**
 	 * How will we refer to this branch
@@ -76,7 +79,7 @@ abstract class Branch {
 	 *
 	 * @return string
 	 */
-	abstract protected function getWorkDir() :string;
+	abstract public function getWorkDir() :string;
 
 	/**
 	 * Get the branch prefix default;
@@ -90,7 +93,7 @@ abstract class Branch {
 	 *
 	 * @return string
 	 */
-	abstract protected function getRepoPath() :string;
+	abstract public function getRepoPath() :string;
 
 	/**
 	 * Get the directory to put the branch in
@@ -116,7 +119,7 @@ abstract class Branch {
 	/**
 	 * Set up the options for the command line program
 	 */
-	public static function setupOptions( Options $opt ) {
+	public static function setupOptions( Options $opt ) :void {
 		$opt->setHelp( "Create Branches" );
 		$opt->setCommandHelp( "Specify one of the following branch styles:" );
 		$opt->setCompactHelp();
@@ -132,8 +135,8 @@ abstract class Branch {
 		);
 		$opt->registerOption( 'dry-run', 'Do everything but push.', 'd' );
 		$opt->registerOption(
-			'path', 'Path on Local disk from which to branch mediawiki-core.',
-			'p', 'path'
+			'path', 'Path on Local disk from which to branch '
+			. 'mediawiki-core.', 'p', 'path'
 		);
 		$opt->registerOption(
 			'continue-from', 'Extension from which to resume branching. '
@@ -159,6 +162,7 @@ abstract class Branch {
 
 		foreach ( array_keys( $iter->getClassMap() ) as $classname ) {
 			if (
+				is_string( $classname ) &&
 				$classname !== $thisClass &&
 				get_parent_class( $classname ) === $thisClass
 			) {
@@ -176,38 +180,45 @@ abstract class Branch {
 	 *
 	 * @param string $type of brancher to create
 	 * @param Options $opt the user gave
-	 * @return Wikimedia\Release\Branch
+	 * @return self
 	 */
 	public static function getBrancher(
-		string $type,
+		?string $type,
 		Options $opt,
 		LoggerInterface $logger
-	) {
+	) :self {
 		if ( !$type ) {
-			return "Please specify a branch type!\n";
+			throw new Usage( "Please specify a branch type!" );
+		}
+
+		if ( !$opt->getOpt( 'new' ) ) {
+			throw new Usage( "'-n' or '--new' must be set.\n" );
+		}
+
+		if ( !$opt->getCmd() ) {
+			throw new Usage( "Please provide a branch type.\n" );
 		}
 
 		$class = __CLASS__ . "\\" . ucFirst( $type );
 		if ( !class_exists( $class ) ) {
-			return "$type is not a proper brancher!";
+			throw new Usage( "$type is not a proper brancher!" );
 		}
 
-		if ( !$opt->getOpt( 'new' ) ) {
-			return "'-n' or '--new' must be set.\n";
-		}
-		if ( !$opt->getCmd() ) {
-			return "Please provide a branch type.\n";
-		}
-
-		return new $class(
+		$brancher = new $class(
 			$opt->getOpt( "old", 'master' ),
 			$opt->getOpt( 'branch-prefix', '' ),
 			$opt->getOpt( 'new' ),
 			$opt->getOpt( 'path', '' ),
 			$opt->getOpt( 'dryRun', true ),
-			$opt->getOpt( 'branchFrom', 'master' ), // Should this just use old?
+			// Should this just use old?
+			$opt->getOpt( 'branchFrom', 'master' ),
 			$logger
 		);
+
+		if ( is_a( $brancher, self::class ) ) {
+			return $brancher;
+		}
+		throw new Usage( "$type is not a proper brancher!" );
 	}
 
 	public function __construct(
@@ -233,6 +244,7 @@ abstract class Branch {
 		$this->branchedSubmodules = [];
 		$this->alreadyBranched = [];
 		$this->specialExtensions = [];
+		$this->dryRun = $dryRun;
 		$this->control = new Control( $logger, $dryRun, $this );
 	}
 
@@ -245,8 +257,8 @@ abstract class Branch {
 		$repoPath = $this->getRepoPath();
 		$branchPrefix = $this->getBranchPrefix();
 		$buildDir = $this->getWorkDir();
-		$dryRun = false; // Push stuff or not
 		$noisy = false; // Output git commands or not
+		$dryRun = false;  // Push stuff or not
 
 		if ( is_readable( $dir . '/default.conf' ) ) {
 			require $dir . '/default.conf';
@@ -518,8 +530,7 @@ abstract class Branch {
 			$this->control->checkout( $this->newVersion );
 		} elseif (
 			$onBranch === $this->newVersion &&
-			$hasRemoteBranch &&
-			$localTracksRemote
+			$hasRemoteBranch && $localTracksRemote
 		) {
 			$this->logger->notice(
 				"Already on local branch that tracks remote."
@@ -537,7 +548,7 @@ abstract class Branch {
 			$this->control->pull();
 		} elseif ( !$hasLocalBranch ) {
 			$this->control->checkoutNewBranch( $this->newVersion, "origin/master" );
-			$this->setOrigin( $this->clonePath );
+			// $this->setOrigin( $this->clonePath );
 		}
 	}
 
@@ -570,7 +581,7 @@ abstract class Branch {
 		# Add extensions/skins/vendor
 		foreach ( $this->branchedExtensions as $name ) {
 			$this->control->addSubmodule(
-				"{$this->repoPath}/{$name}", $name
+				$this->newVersion, "{$this->repoPath}/{$name}", $name
 			);
 		}
 
@@ -598,7 +609,7 @@ abstract class Branch {
 					: $this->branchPrefix . $this->oldVersion;
 		$dest = $this->getBranchDir();
 
-		$this->cloneAndEnterDest( $oldVersion, $dest );
+		$this->control->cloneAndEnterDest( $oldVersion, $dest );
 		$this->createAndUseNew();
 		$this->handleSubmodules();
 		$this->handleVersionUpdate();

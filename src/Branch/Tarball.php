@@ -34,7 +34,7 @@ class Tarball extends Branch {
 		return 'Prepare the tree for a tarball release';
 	}
 
-	protected function getWorkDir() :string {
+	public function getWorkDir() :string {
 		$dir = getenv( "mwDir" );
 		if ( !$dir ) {
 			$dir = sys_get_temp_dir() . '/make-tarball-branch';
@@ -46,7 +46,7 @@ class Tarball extends Branch {
 		return "";
 	}
 
-	protected function getRepoPath() :string {
+	public function getRepoPath() :string {
 		$path = getenv( "gerritHead" );
 		if ( !$path ) {
 			$path = 'https://gerrit.wikimedia.org/r';

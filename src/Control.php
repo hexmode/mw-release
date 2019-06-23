@@ -51,10 +51,11 @@ class Control {
 	) {
 		$this->logger = $logger;
 		$this->dryRun = $dryRun;
-
+		$this->dirs = [];
 		$this->output = "";
 		$this->storeOutput = false;
 		$this->brancher = $brancher;
+		$this->localBranches = [];
 	}
 
 	/**
@@ -202,7 +203,8 @@ class Control {
 	 * Determine if this directory is a git clone of the repository
 	 *
 	 * @param string $dir to check for repo
-	 * @param string $repoUrl url to ensure that is a remote for this repository
+	 * @param string $repoUrl url to ensure that is a remote for this
+	 *   repository
 	 * @return bool
 	 */
 	public function isGitDir( $dir, $repoUrl ) :bool {
@@ -213,9 +215,9 @@ class Control {
 		$this->chdir( $dir );
 
 		# Assume the remote we want is named origin
-		if ( $repoUrl !== $this->cmdOut(
-				 "git", "remote", "get-url", "origin"
-		) ) {
+		if (
+			$repoUrl !== $this->cmdOut( "git", "remote", "get-url", "origin" )
+		) {
 			$ret = false;
 		}
 		$this->popdir();
@@ -228,7 +230,10 @@ class Control {
 	 * @param string $oldVersion
 	 * @param string $dest
 	 */
-	public function cloneAndEnterDest( $oldVersion, $dest ) :void {
+	public function cloneAndEnterDest(
+		string $oldVersion,
+		string $dest
+	) :void {
 		AtEase::suppressWarnings();
 		if ( lstat( $dest ) !== false ) {
 			AtEase::restoreWarnings();
@@ -237,12 +242,15 @@ class Control {
 			);
 		} else {
 			AtEase::restoreWarnings();
-			$this->clone( $dest, $this->clonePath, $oldVersion );
+			$this->clone( $dest, $this->brancher->getRepoPath(), $oldVersion );
 		}
 		$this->chdir( $dest );
-		if ( $this->runCmd(
-			'git', 'remote', 'set-url', 'origin', $this->getRepoPath()
-		) ) {
+		if (
+			$this->runCmd(
+				'git', 'remote', 'set-url', 'origin',
+				$this->brancher->getRepoPath()
+			)
+		) {
 			$this->croak( "Please fix the problems before continuing" );
 		}
 	}
@@ -292,7 +300,10 @@ class Control {
 	 * @param string $branch
 	 * @return bool
 	 */
-	public function hasRemoteBranch( string $repoUrl, string $branch ) :bool {
+	public function hasRemoteBranch(
+		string $repoUrl,
+		string $branch
+	) :bool {
 		/**
 		 *  From manpage for git-ls-remote:
 		 *
@@ -336,12 +347,16 @@ class Control {
 	 *
 	 * @param string $dir
 	 */
-	public function pull( string $dir ) :void {
-		$this->chdir( $dir );
+	public function pull( ?string $dir = null ) :void {
+		if ( $dir ) {
+			$this->chdir( $dir );
+		}
 		if ( $this->cmd( 'git', 'pull' ) ) {
 			$this->croak( "Failed to update current branch!" );
 		}
-		$this->popdir();
+		if ( $dir ) {
+			$this->popdir();
+		}
 	}
 
 	/**
@@ -371,7 +386,8 @@ class Control {
 			}
 		} else {
 			$this->logger->warning(
-				"Using already existing branch ($branch) instead of a new one."
+				"Using already existing branch ($branch) instead of a "
+				. "new one."
 			);
 			$this->checkout( $branch );
 		}
@@ -416,19 +432,6 @@ class Control {
 	}
 
 	/**
-	 * Attempt to push the to the remote branch
-	 *
-	 * @param $remoteName
-	 */
-	public function pushRemote( $remoteName ) :void {
-		if ( $this->runWriteCmd(
-				 'git', 'push', '-u', 'origin', $remoteName
-		) ) {
-			$this->croak( "Problems pushing to origin!" );
-		}
-	}
-
-	/**
 	 * Actually clone the repository
 	 *
 	 * @param string $repo dir to put things
@@ -441,7 +444,8 @@ class Control {
 		string $branch = 'master'
 	) :void {
 		if ( $this->cmd(
-			'git', 'clone', '--branch', $branch, '--depth', 1, $repoPath, $repo
+			'git', 'clone', '--branch', $branch, '--depth', 1, $repoPath,
+			$repo
 		) ) {
 			$this->croak(
 				"Problem creating branch ($branch) on repo ($repo)!"
@@ -471,14 +475,16 @@ class Control {
 		string $branch,
 		string $repo,
 		string $dir
-	) {
+	) :void {
 		if (
 			$this->runCmd(
 				'git', 'submodule', 'add', '-f', '-b', $branch, $repo,
 				$dir
 			)
 		) {
-			$this->croak( "Adding submodule from repository ($repo) failed!" );
+			$this->croak(
+				"Adding submodule from repository ($repo) failed!"
+			);
 		}
 	}
 
@@ -503,7 +509,7 @@ class Control {
 	 * @return bool
 	 */
 	public function hasLocalBranch( string $branchName ) :bool {
-		if ( $this->localBranches === null ) {
+		if ( count( $this->localBranches ) === 0 ) {
 			$this->localBranches = $this->getLocalBranches();
 		}
 
