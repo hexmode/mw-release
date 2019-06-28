@@ -31,25 +31,14 @@ use Wikimedia\Release\Branch;
 class MakeBranch extends PSR3CLI {
 
 	protected function setup( Options $opt ) {
+		$this->setAutocatch();
 		Branch::setupOptions( $opt );
 	}
 
 	protected function main( Options $opt ) {
 		$branch = Branch::getBrancher( $opt->getCmd(), $opt, $this );
-		if ( is_string( $branch ) ) {
-			$this->die( $branch );
-		}
-
 		$branch->initialize();
 		$branch->execute();
-	}
-
-	public function die( $msg, $showHelp = true ) {
-		$this->error( $msg );
-		if ( $showHelp ) {
-			echo $this->options->help();
-		}
-		exit( 1 );
 	}
 }
 

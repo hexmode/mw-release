@@ -24,9 +24,10 @@
 namespace Wikimedia\Release;
 
 use Christiaan\StreamProcess\StreamProcess;
+use Exception;
 use Psr\Log\LoggerInterface;
-use Wikimedia\AtEase\AtEase;
 use React\EventLoop\Factory as LoopFactory;
+use Wikimedia\AtEase\AtEase;
 
 class Control {
 	/** @var LoggerInterface */
@@ -58,26 +59,71 @@ class Control {
 		$this->localBranches = [];
 	}
 
-	/**
-	 * Try to run a command and die if it fails
-	 *
-	 * @return integer exit code
-	 */
-	public function runCmd( /*...*/ ) :int {
-		$args = func_get_args();
-		if ( is_array( $args[0] ) ) {
-			$args = $args[0];
-		}
+	protected function croak( string $msg ) :void {
+		$this->brancher->croak( $msg );
+	}
 
-		$attempts = 0;
-		do {
-			if ( $attempts ) {
-				$this->logger->warning( "sleeping for 5s" );
-				sleep( 5 );
-			}
-			$ret = $this->cmd( $args );
-		} while ( $ret !== 0 && ++$attempts <= 5 );
-		return $ret;
+	/**
+	 * Find out if the remote has this branch
+	 *
+	 * @param string $repoUrl
+	 * @param string $branch
+	 * @return bool
+	 */
+	public function hasRemoteBranch(
+		string $repoUrl,
+		string $branch
+	) :bool {
+		/**
+		 *  From manpage for git-ls-remote:
+		 *
+		 *   --exit-code
+         * Exit with status "2" when no matching refs are found in
+         * the remote repository. Usually the command exits with
+         * status "0" to indicate it successfully talked with the
+         * remote repository, whether it found any matching refs.
+		 */
+		return $this->cmd(
+			'git', 'ls-remote', '--exit-code', '--heads', $repoUrl, $branch
+		) !== 2;
+	}
+
+	/**
+	 * Add a submodule to the current git repo
+	 *
+	 * @param string $branch to use for submodule
+	 * @param string $repo to use as the remote
+	 * @param string $dir relative to root of current repo
+	 */
+	public function addSubmodule(
+		string $branch,
+		string $repo,
+		string $dir
+	) :void {
+		throw new Exception( "Implement addSubmodule!" );
+	}
+
+	/**
+	 * Return the output of git status --porcelain
+	 * be dealt with
+	 *
+	 * @return string
+	 */
+	public function getChanges() :string {
+		return $this->cmdOutNoTrim( 'git', 'status', '--porcelain' );
+	}
+
+	/**
+	 * Like cmdOut, but the output isn't put through trim.
+	 *
+	 * @return string
+	 */
+	public function cmdOutNoTrim( /*...*/ ) :string {
+		$this->storeOutput = true;
+		$this->output = '';
+		$this->cmd( func_get_args() );
+		$this->storeOutput = false;
+		return $this->output;
 	}
 
 	/**
@@ -126,393 +172,5 @@ class Control {
 
 		$loop->run();
 		return $proc->close();
-	}
-
-	/**
-	 * Return what the command sends to stdout instead of just
-	 * printing it. Stderr is still printed.
-	 *
-	 * @return string
-	 */
-	public function cmdOut( /*...*/ ) :string {
-		$this->storeOutput = true;
-		$this->output = '';
-		$this->cmd( func_get_args() );
-		$this->storeOutput = false;
-		return trim( $this->output );
-	}
-
-	/**
-	 * Like cmdOut, but the output isn't put through trim.
-	 *
-	 * @return string
-	 */
-	public function cmdOutNoTrim( /*...*/ ) :string {
-		$this->storeOutput = true;
-		$this->output = '';
-		$this->cmd( func_get_args() );
-		$this->storeOutput = false;
-		return $this->output;
-	}
-
-	/**
-	 * Conditionally (if not a dry run) run a command.
-	 *
-	 * @return int
-	 */
-	public function runWriteCmd( /*...*/ ) :int {
-		$args = func_get_args();
-		$ret = 0;
-		if ( $this->dryRun ) {
-			$this->logger->debug( "[dry-run] " . implode( ' ', $args ) );
-		} else {
-			$ret = $this->runCmd( $args );
-		}
-		return $ret;
-	}
-
-	protected function croak( string $msg ) :void {
-		$this->brancher->croak( $msg );
-	}
-
-	/**
-	 * Change dir or die if there is a problem.
-	 *
-	 * @param string $dir
-	 */
-	public function chdir( string $dir ) :void {
-		$this->dirs[] = getcwd();
-		if ( !chdir( $dir ) ) {
-			$this->croak( "Unable to change working directory to $dir" );
-		}
-		$this->logger->debug( "$ cd $dir" );
-	}
-
-	/**
-	 * Change dir to the previous directory.
-	 */
-	public function popdir() :void {
-		$dir = array_pop( $this->dirs );
-		if ( !chdir( $dir ) ) {
-			$this->croak( "Unable to return to the $dir directory" );
-		}
-		$this->logger->debug( "$ cd $dir" );
-	}
-
-	/**
-	 * Determine if this directory is a git clone of the repository
-	 *
-	 * @param string $dir to check for repo
-	 * @param string $repoUrl url to ensure that is a remote for this
-	 *   repository
-	 * @return bool
-	 */
-	public function isGitDir( $dir, $repoUrl ) :bool {
-		$ret = true;
-		if ( !( is_dir( $dir ) && file_exists( "$dir/.git" ) ) ) {
-			return false;
-		}
-		$this->chdir( $dir );
-
-		# Assume the remote we want is named origin
-		if (
-			$repoUrl !== $this->cmdOut( "git", "remote", "get-url", "origin" )
-		) {
-			$ret = false;
-		}
-		$this->popdir();
-		return $ret;
-	}
-
-	/**
-	 * Handle cloning to a particular destination
-	 *
-	 * @param string $oldVersion
-	 * @param string $dest
-	 */
-	public function cloneAndEnterDest(
-		string $oldVersion,
-		string $dest
-	) :void {
-		AtEase::suppressWarnings();
-		if ( lstat( $dest ) !== false ) {
-			AtEase::restoreWarnings();
-			$this->logger->debug(
-				"Destination ($dest) already exists, not cloning"
-			);
-		} else {
-			AtEase::restoreWarnings();
-			$this->clone( $dest, $this->brancher->getRepoPath(), $oldVersion );
-		}
-		$this->chdir( $dest );
-		if (
-			$this->runCmd(
-				'git', 'remote', 'set-url', 'origin',
-				$this->brancher->getRepoPath()
-			)
-		) {
-			$this->croak( "Please fix the problems before continuing" );
-		}
-	}
-
-	/**
-	 * Handle a submodule updae
-	 *
-	 * @param string $submodule
-	 */
-	public function initSubmodule( string $submodule ) :void {
-		if ( $this->cmd(
-				 'git', 'submodule', 'update', '--init', $submodule
-		) ) {
-			$this->croak(
-				"Problem creating with submodule ($submodule)!"
-			);
-		}
-	}
-
-	/**
-	 * Get current branch
-	 *
-	 * @return string
-	 */
-	public function getCurrentBranch() :string {
-		return $this->cmdOut( 'git', 'rev-parse', '--abbrev-ref', 'HEAD' );
-	}
-
-	/**
-	 * Get a list of current branches
-	 *
-	 * @return array
-	 */
-	public function getLocalBranches() :array {
-		return array_flip( explode(
-			"\n", $this->cmdOut(
-				'git', 'for-each-ref', '--format=%(refname:short)',
-				'refs/heads/'
-			) )
-		);
-	}
-
-	/**
-	 * Find out if the remote has this branch
-	 *
-	 * @param string $repoUrl
-	 * @param string $branch
-	 * @return bool
-	 */
-	public function hasRemoteBranch(
-		string $repoUrl,
-		string $branch
-	) :bool {
-		/**
-		 *  From manpage for git-ls-remote:
-		 *
-		 *   --exit-code
-         * Exit with status "2" when no matching refs are found in
-         * the remote repository. Usually the command exits with
-         * status "0" to indicate it successfully talked with the
-         * remote repository, whether it found any matching refs.
-		 */
-		return $this->cmd(
-			'git', 'ls-remote', '--exit-code', '--heads', $repoUrl, $branch
-		) !== 2;
-	}
-
-	/**
-	 * Find what remote branch the local branch is tracking
-	 *
-	 * @param string $branch
-	 * @return string
-	 */
-	public function getTrackingBranch( string $branch ) :string {
-		return $this->cmdOut(
-			'git', 'for-each-ref', '--format=%(upstream:short)',
-			"refs/heads/$branch"
-		);
-	}
-
-	/**
-	 * Check out a the local version of the branch
-	 *
-	 * @param string $branch
-	 */
-	public function checkout( string $branch ) :void {
-		if ( $this->cmd( 'git', 'checkout', $branch ) ) {
-			$this->croak( "Failed to check out $branch!" );
-		}
-	}
-
-	/**
-	 * Update the current branch
-	 *
-	 * @param string $dir
-	 */
-	public function pull( ?string $dir = null ) :void {
-		if ( $dir ) {
-			$this->chdir( $dir );
-		}
-		if ( $this->cmd( 'git', 'pull' ) ) {
-			$this->croak( "Failed to update current branch!" );
-		}
-		if ( $dir ) {
-			$this->popdir();
-		}
-	}
-
-	/**
-	 * Checkout a new branch
-	 * @param string $branch
-	 * @param string $sourceBranch
-	 */
-	public function checkoutNewBranch(
-		string $branch,
-		string $sourceBranch = null
-	) :void {
-		if ( $this->getCurrentBranch() === $branch ) {
-			$this->logger->warning(
-				"Already on branch ($branch).  Using it."
-			);
-		} elseif ( !$this->hasLocalBranch( $branch ) ) {
-			$cmd = [ 'git', 'checkout', '-b', $branch ];
-			$fromBranch = "";
-			if ( $sourceBranch !== null ) {
-				$cmd[] = $sourceBranch;
-				$fromBranch = " from $sourceBranch";
-			}
-			if ( $this->cmd( $cmd ) ) {
-				$this->croak(
-					"Failed to check out branch ($branch)$fromBranch!"
-				);
-			}
-		} else {
-			$this->logger->warning(
-				"Using already existing branch ($branch) instead of a "
-				. "new one."
-			);
-			$this->checkout( $branch );
-		}
-	}
-
-	/**
-	 * Set origin to URL
-	 *
-	 * @param string $url
-	 */
-	public function setOrigin( string $url ) :void {
-		if ( $this->cmd( 'git', 'remote', 'set-url', 'origin', $url ) ) {
-			$this->croak( "Somehow there was a problem setting the remote" );
-		}
-	}
-
-	/**
-	 * Set url as the origin
-	 *
-	 * @param string $url
-	 * @return string
-	 */
-	public function getCurrentLogToOrigin( string $branch ) :string {
-		if ( $this->cmd( 'git', 'fetch' ) ) {
-			$this->croak(
-				"Somehow there was a problem fetching from the remote"
-			);
-		}
-		return $this->cmdOut(
-			'git', 'log', "HEAD..origin/$branch", '--pretty=oneline'
-		);
-	}
-
-	/**
-	 * Return the output of git status --porcelain
-	 * be dealt with
-	 *
-	 * @return string
-	 */
-	public function getChanges() :string {
-		return $this->cmdOutNoTrim( 'git', 'status', '--porcelain' );
-	}
-
-	/**
-	 * Actually clone the repository
-	 *
-	 * @param string $repo dir to put things
-	 * @param string $repoPath to clone from
-	 * @param string $branch
-	 */
-	public function clone(
-		string $repo,
-		string $repoPath,
-		string $branch = 'master'
-	) :void {
-		if ( $this->cmd(
-			'git', 'clone', '--branch', $branch, '--depth', 1, $repoPath,
-			$repo
-		) ) {
-			$this->croak(
-				"Problem creating branch ($branch) on repo ($repo)!"
-			);
-		}
-	}
-
-	/**
-	 * Remove a directory
-	 *
-	 * @param string $dir
-	 */
-	public function rmdir( string $dir ) :void {
-		if ( $this->runCmd( 'rm', '-rf', '--', $dir ) ) {
-			$this->croak( "Problem removing $dir!" );
-		}
-	}
-
-	/**
-	 * Add a submodule to the current git repo
-	 *
-	 * @param string $branch to use for submodule
-	 * @param string $repo to use as the remote
-	 * @param string $dir relative to root of current repo
-	 */
-	public function addSubmodule(
-		string $branch,
-		string $repo,
-		string $dir
-	) :void {
-		if (
-			$this->runCmd(
-				'git', 'submodule', 'add', '-f', '-b', $branch, $repo,
-				$dir
-			)
-		) {
-			$this->croak(
-				"Adding submodule from repository ($repo) failed!"
-			);
-		}
-	}
-
-	/**
-	 * Push branch to remote.
-	 *
-	 * @param string $remote
-	 * @param string $branch
-	 */
-	public function push( string $remote, string $branch ) :void {
-		if ( $this->runWriteCmd( 'git', 'push', $remote, $branch ) ) {
-			$this->croak(
-				"Couldn't push branch ($branch) to remote ($remote)!"
-			);
-		}
-	}
-
-	/**
-	 * True if the local git checkout has the branch
-	 *
-	 * @param string $branchName
-	 * @return bool
-	 */
-	public function hasLocalBranch( string $branchName ) :bool {
-		if ( count( $this->localBranches ) === 0 ) {
-			$this->localBranches = $this->getLocalBranches();
-		}
-
-		return isset( $this->localBranches[ $branchName ] );
 	}
 }

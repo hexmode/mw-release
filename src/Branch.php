@@ -252,6 +252,7 @@ abstract class Branch {
 	 * Set up the defaults for this branch type
 	 *
 	 * @param string $dir
+	 * @psalm-suppress UnresolvableInclude
 	 */
 	protected function setDefaults( string $dir ) :void {
 		$repoPath = $this->getRepoPath();
@@ -297,6 +298,7 @@ abstract class Branch {
 	 * Get a different branch types
 	 *
 	 * @param string $dir
+	 * @psalm-suppress UnresolvableInclude
 	 */
 	protected function setBranchLists( string $dir ) :void {
 		$branchLists = [];
@@ -333,29 +335,6 @@ abstract class Branch {
 	 * @param string $branch
 	 */
 	public function check( string $dir, string $branch = "master" ) :void {
-		$this->control->chdir( $dir );
-
-		$current = $this->control->getCurrentBranch();
-		if ( $current === $branch ) {
-			$this->logger->notice(
-				"Verifying that make-branch is up to date with "
-				. "origin/$branch..."
-			);
-			$log = $this->control->getCurrentLogToOrigin( $branch );
-			if ( strlen( $log ) > 0 ) {
-				$this->croak(
-					"Out of date, you need to integrate these commits "
-					. "from origin/$branch:\n$log",
-				);
-			} else {
-				$this->logger->notice( "ok" );
-			}
-		} else {
-			$this->croak(
-				"Wrong branch: $current. Please run this "
-				. "command from the latest $branch revision.",
-			);
-		}
 		$changes = $this->control->getChanges();
 		if ( $changes ) {
 			$this->logger->notice(
@@ -363,8 +342,6 @@ abstract class Branch {
 				. $changes
 			);
 		}
-
-		$this->control->popdir();
 	}
 
 	/**
@@ -435,7 +412,6 @@ abstract class Branch {
 	 * Entry point to branching
 	 */
 	public function execute() :void {
-		$this->control->chdir( $this->setupBuildDirectory() );
 		foreach ( $this->branchedExtensions as $ext ) {
 			$this->branchRepo( $ext );
 		}
@@ -451,31 +427,7 @@ abstract class Branch {
 	 * @param string $branchName
 	 */
 	public function createBranch( string $branchName ) :void {
-		$this->control->checkoutNewBranch( $branchName );
 		$this->control->push( 'origin', $branchName );
-	}
-
-	/**
-	 * Clone a repository into a new dir or update it
-	 *
-	 * @param string $repo dir to put things
-	 * @param string $repoPath to clone from
-	 * @param string $branch
-	 */
-	public function cloneOrUpdate(
-		string $repo,
-		string $repoPath,
-		string $branch = 'master'
-	) :void {
-		if ( $this->control->isGitDir( $repo, $repoPath ) ) {
-			$this->control->pull( $repo );
-		} elseif ( !file_exists( $repo ) ) {
-			$this->control->clone( $repo, $repoPath, $branch );
-		} else {
-			$this->croak(
-				"Something is in the way, cannot update or checkout $repo!"
-			);
-		}
 	}
 
 	/**
@@ -496,19 +448,15 @@ abstract class Branch {
 			return;
 		}
 
-		$this->cloneOrUpdate( $repo, $repoPath, $branch );
-		$this->control->chdir( $repo );
-
 		if ( isset( $this->branchedSubmodules[$path] ) ) {
-			foreach ( (array)$this->branchedSubmodules[$path] as $submodule ) {
+			foreach (
+				(array)$this->branchedSubmodules[$path] as $submodule
+			) {
 				$this->control->initSubmodule( $submodule );
-				$this->control->chdir( $submodule );
 				$this->createBranch( $this->newVersion );
-				$this->control->popdir();
 			}
 		}
 		$this->createBranch( $this->newVersion );
-		$this->control->popdir();
 	}
 
 	/**

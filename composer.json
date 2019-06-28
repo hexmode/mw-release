@@ -37,10 +37,6 @@
 		},
 		{
 			"type": "vcs",
-			"url": "https://github.com/hexmode/netrc"
-		},
-		{
-			"type": "vcs",
 			"url": "https://github.com/hexmode/http-basic-auth"
 		}
 	],
