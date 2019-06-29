@@ -28,5 +28,9 @@
 		"skins/Timeless",
 		"skins/Vector",
 		"vendor"
-	]
+	],
+	"submodules": {
+	},
+	"special_extensions": {
+	}
 }
