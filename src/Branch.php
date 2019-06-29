@@ -260,6 +260,7 @@ abstract class Branch {
 		$buildDir = $this->getWorkDir();
 		$noisy = false; // Output git commands or not
 		$dryRun = false;  // Push stuff or not
+		$gerritURL = "https;//gerrit.wikimedia.org/r";
 
 		if ( is_readable( $dir . '/default.conf' ) ) {
 			require $dir . '/default.conf';
@@ -271,6 +272,7 @@ abstract class Branch {
 			require $dir . '/local.conf';
 		}
 
+		$this->control->setGerritURL( $gerritURL );
 		$this->repoPath = $repoPath;
 		$this->branchPrefix = $branchPrefix;
 		$this->dryRun = $this->dryRun ?? $dryRun;
@@ -322,7 +324,6 @@ abstract class Branch {
 		$this->stupidSchemaCheck(
 			'index is null for', $branchLists, 'local.conf'
 		);
-
 		$this->branchedExtensions = $branchLists['extensions'] ?? [];
 		$this->branchedSubmodules = $branchLists['submodules'] ?? [];
 		$this->specialExtensions = $branchLists['special_extensions'] ?? [];
@@ -349,8 +350,10 @@ abstract class Branch {
 	 */
 	public function initialize() :void {
 		// Best way to get the full path to the file being executed.
-		list( $arg0 ) = get_included_files();
+		[ $arg0 ] = get_included_files();
 		$dir = dirname( $arg0 );
+
+		// Warn if we have any outstanding changes.
 		$this->check( $dir, "master" );
 		$this->setDefaults( $dir );
 		$this->setBranchLists( $dir );
@@ -409,11 +412,61 @@ abstract class Branch {
 	}
 
 	/**
+	 * For a list of repositories, return a list of all those that do
+	 * not have a $this->newVersion branch yet with the current HEAD
+	 * of the master branch.
+	 *
+	 * @param array $repos list of repositories
+	 * @return array
+	 */
+	protected function queryBranchPoints( array $repos ) :array {
+		return $this->control->getBranchInfo(
+			array_map(
+				function ( $repo ) {
+					$this->qualifyRepo( $repo );
+				}, $repos
+			), [ 'master', $this->newVersion ]
+		);
+	}
+
+	/**
+	 * Does this string start with that one?
+	 *
+	 * @param string $this
+	 * @param string $that
+	 * @return bool
+	 */
+	protected function startsWith( string $thisStr, string $thatStr ) :bool {
+		$len = mb_strlen( $thisStr, 'utf-8' );
+		return mb_substr( $thisStr, 0, $len, 'utf-8' ) === $thatStr;
+	}
+
+	/**
+	 * Translate this repository name to what it is in gerrit.
+	 *
+	 * @param string $repo
+	 * @return string
+	 */
+	protected function qualifyRepo( string $repo ) :string {
+		if (
+			$this->startsWith( $repo, "extensions/" ) ||
+			$this->startsWith( $repo, "skins/" )
+		) {
+			return "mediawiki/" . $repo;
+		}
+		return $repo;
+	}
+
+	/**
 	 * Entry point to branching
 	 */
 	public function execute() :void {
-		foreach ( $this->branchedExtensions as $ext ) {
-			$this->branchRepo( $ext );
+		# Get the list of branchpoint for those extensions that need
+		# branching.
+		$branchPoints = $this->queryBranchPoints( $this->branchedExtensions );
+
+		foreach ( $branchPoints as $repo => $branchPoint ) {
+			$this->branchRepo( $repo, $branchPoint );
 		}
 		foreach ( $this->specialExtensions as $ext => $branch ) {
 			$this->branchRepo( $ext, $branch );
@@ -425,9 +478,10 @@ abstract class Branch {
 	 * Create this branch
 	 *
 	 * @param string $branchName
+	 * @param string $from branch point
 	 */
-	public function createBranch( string $branchName ) :void {
-		$this->control->push( 'origin', $branchName );
+	public function createBranch( string $branchName, string $from ) :void {
+		$this->control->createBranch( 'origin', $branchName, $from );
 	}
 
 	/**
@@ -452,8 +506,8 @@ abstract class Branch {
 			foreach (
 				(array)$this->branchedSubmodules[$path] as $submodule
 			) {
-				$this->control->initSubmodule( $submodule );
-				$this->createBranch( $this->newVersion );
+				$this->control->addSubmodule( $repoPath, $submodule );
+				$this->control->createBranch( $submodule, $branch, $this->newVersion );
 			}
 		}
 		$this->createBranch( $this->newVersion );
@@ -555,9 +609,7 @@ abstract class Branch {
 		$oldVersion = $this->oldVersion === $branchName
 					? $branchName
 					: $this->branchPrefix . $this->oldVersion;
-		$dest = $this->getBranchDir();
 
-		$this->control->cloneAndEnterDest( $oldVersion, $dest );
 		$this->createAndUseNew();
 		$this->handleSubmodules();
 		$this->handleVersionUpdate();

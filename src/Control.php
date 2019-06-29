@@ -28,6 +28,7 @@ use Exception;
 use Psr\Log\LoggerInterface;
 use React\EventLoop\Factory as LoopFactory;
 use Wikimedia\AtEase\AtEase;
+use Hexmode\PhpGerrit\GerritRestAPI;
 
 class Control {
 	/** @var LoggerInterface */
@@ -44,6 +45,8 @@ class Control {
 	protected $brancher;
 	/** @var array */
 	protected $localBranches;
+	/** @var ?GerritRestAPI */
+	protected $gerrit = null;
 
 	public function __construct(
 		LoggerInterface $logger,
@@ -57,6 +60,15 @@ class Control {
 		$this->storeOutput = false;
 		$this->brancher = $brancher;
 		$this->localBranches = [];
+	}
+
+	/**
+	 * Set up a gerrit repo
+	 *
+	 * @param string $url
+	 */
+	public function setGerritURL( string $url ) :void {
+		$this->gerrit = new GerritRestAPI( $url );
 	}
 
 	protected function croak( string $msg ) :void {
@@ -124,6 +136,33 @@ class Control {
 		$this->cmd( func_get_args() );
 		$this->storeOutput = false;
 		return $this->output;
+	}
+
+	/**
+	 * Get branch info for a list of repositories
+	 *
+	 * @param array $repo
+	 * @param array $branch to get info on
+	 * @return array
+	 */
+	public function getBranchInfo( array $repo, array $branch ) :array {
+		if ( !$this->gerrit ) {
+			$this->croak( "Please set up the Gerrit remote first!" );
+		}
+
+		$ret = [];
+		$lookFor = array_flip( $branch );
+		foreach( $repo as $project ) {
+			$branch = $this->gerrit->getProjectBranches( $project );
+			$ret[$project] = array_filter(
+				$branch,
+				function ( $branch ) use ( $lookFor ) {
+					return isset( $lookFor[$branch] );
+				},
+				ARRAY_FILTER_USE_KEY
+			);
+		}
+		return [];
 	}
 
 	/**
