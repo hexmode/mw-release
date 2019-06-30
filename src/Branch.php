@@ -29,6 +29,8 @@ use splitbrain\phpcli\UsageException as Usage;
 use Symfony\Component\Finder\Finder;
 
 abstract class Branch {
+	const mwRepo = "mediawiki/core";
+
 	/** @var string */
 	protected $newVersion;
 	/** @var string */
@@ -226,8 +228,8 @@ abstract class Branch {
 		string $branchPrefix,
 		string $newVersion,
 		string $clonePath,
-		string $branchFrom,
 		bool $dryRun,
+		string $branchFrom,
 		LoggerInterface $logger
 	) {
 		$this->oldVersion = $oldVersion;
@@ -260,7 +262,7 @@ abstract class Branch {
 		$buildDir = $this->getWorkDir();
 		$noisy = false; // Output git commands or not
 		$dryRun = false;  // Push stuff or not
-		$gerritURL = "https;//gerrit.wikimedia.org/r";
+		$gerritURL = "https://gerrit.wikimedia.org/r";
 
 		if ( is_readable( $dir . '/default.conf' ) ) {
 			require $dir . '/default.conf';
@@ -420,12 +422,20 @@ abstract class Branch {
 	 * @return array
 	 */
 	protected function queryBranchPoints( array $repos ) :array {
-		return $this->control->getBranchInfo(
-			array_map(
-				function ( $repo ) {
-					$this->qualifyRepo( $repo );
-				}, $repos
-			), [ 'master', $this->newVersion ]
+		return $this->control->getBranchInfo( $this->getMappedRepos( $repos ) );
+	}
+
+	/**
+	 * Map the list of repositories' short names to their longer onex.
+	 *
+	 * @param array list of short names
+	 * @return array
+	 */
+	protected function getMappedRepos( array $repos ) {
+		return array_map(
+			function ( $repo ) {
+				return $this->qualifyRepo( $repo );
+			}, $repos
 		);
 	}
 
@@ -437,7 +447,7 @@ abstract class Branch {
 	 * @return bool
 	 */
 	protected function startsWith( string $thisStr, string $thatStr ) :bool {
-		$len = mb_strlen( $thisStr, 'utf-8' );
+		$len = mb_strlen( $thatStr, 'utf-8' );
 		return mb_substr( $thisStr, 0, $len, 'utf-8' ) === $thatStr;
 	}
 
@@ -450,7 +460,8 @@ abstract class Branch {
 	protected function qualifyRepo( string $repo ) :string {
 		if (
 			$this->startsWith( $repo, "extensions/" ) ||
-			$this->startsWith( $repo, "skins/" )
+			$this->startsWith( $repo, "skins/" ) ||
+			$this->startsWith( $repo, "vendor" )
 		) {
 			return "mediawiki/" . $repo;
 		}
@@ -458,20 +469,37 @@ abstract class Branch {
 	}
 
 	/**
+	 * Branch and add a group of extensions as submodules
+	 *
+	 * @param array $extension
+	 */
+	public function branchAndAddGroup( array $extension ) :void {
+		$map = [];
+		foreach ( $extension as $ext ) {
+			$map[$ext] = $this->qualifyRepo( $ext );
+		}
+		foreach ( $map as $dir => $repo ) {
+			if ( !$this->control->hasBranch( $repo, $this->newVersion ) ) {
+				$this->branchRepo( $repo );
+			}
+			if ( !$this->control->hasSubmodule( self::mwRepo, $repo, $dir ) ) {
+				$this->addSubmodule( self::mwRepo, $repo, $dir );
+			}
+		}
+	}
+
+	/**
 	 * Entry point to branching
 	 */
 	public function execute() :void {
-		# Get the list of branchpoint for those extensions that need
-		# branching.
-		$branchPoints = $this->queryBranchPoints( $this->branchedExtensions );
+		$branchPoints = [];
 
-		foreach ( $branchPoints as $repo => $branchPoint ) {
-			$this->branchRepo( $repo, $branchPoint );
+		if ( !$this->control->hasBranch( self::mwRepo, $this->newVersion ) ) {
+			$this->branchRepo( self::mwRepo );
 		}
-		foreach ( $this->specialExtensions as $ext => $branch ) {
-			$this->branchRepo( $ext, $branch );
-		}
-		$this->branch( $this->branchFrom );
+
+		$this->branchAndAddGroup( $this->branchedExtensions );
+		$this->branchAndAddGroup( $this->specialExtensions );
 	}
 
 	/**
@@ -491,66 +519,25 @@ abstract class Branch {
 	 * @param string $branch
 	 */
 	public function branchRepo(
-		string $path,
+		string $repo,
 		string $branch = 'master'
 	) :void {
-		$repo = basename( $path );
-		$repoPath = "{$this->repoPath}/{$path}";
-
-		// repo has already been branched, so just bail out
-		if ( isset( $this->alreadyBranched[$repo] ) ) {
-			return;
-		}
-
-		if ( isset( $this->branchedSubmodules[$path] ) ) {
-			foreach (
-				(array)$this->branchedSubmodules[$path] as $submodule
-			) {
-				$this->control->addSubmodule( $repoPath, $submodule );
-				$this->control->createBranch( $submodule, $branch, $this->newVersion );
-			}
-		}
-		$this->createBranch( $this->newVersion );
+		$this->logger->notice( "Creating {$this->newVersion} branch for $repo" );
+		$this->control->createBranch( $repo, $branch, $this->newVersion );
 	}
 
 	/**
-	 * Create (if necessary) or pull from remote a branch and switch to it.
+	 * Create (if necessary) the new branch
+	 *
+	 * @param string $repo to create it for
 	 */
-	public function createAndUseNew() :void {
-		$onBranch = $this->control->getCurrentBranch();
-		$hasLocalBranch = $this->control->hasLocalBranch( $this->newVersion );
-		$hasRemoteBranch = $this->control->hasRemoteBranch(
-			$this->clonePath, $this->newVersion
-		);
-		$tracking = $this->control->getTrackingBranch( $this->newVersion );
-		$localTracksRemote = $tracking === 'origin/' . $this->newVersion;
-
-		if ( $hasRemoteBranch && !$hasLocalBranch ) {
+	public function create( string $repo ) :void {
+		$hasBranch = $this->control->hasBranch( $this->clonePath, $this->newVersion );
+		if ( !$hasBranch ) {
 			$this->logger->notice(
-				"Remote already has {$this->newVersion}. Using that."
+				"Creating {$this->newVersion} for {$this->clonePath}."
 			);
 			$this->control->checkout( $this->newVersion );
-		} elseif (
-			$onBranch === $this->newVersion &&
-			$hasRemoteBranch && $localTracksRemote
-		) {
-			$this->logger->notice(
-				"Already on local branch that tracks remote."
-			);
-			$this->control->pull();
-		} elseif (
-			$onBranch !== $this->newVersion &&
-			$hasLocalBranch &&
-			$localTracksRemote
-		) {
-			$this->logger->notice(
-				"Already have local branch. Switching to that and updating"
-			);
-			$this->control->checkout( $this->newVersion );
-			$this->control->pull();
-		} elseif ( !$hasLocalBranch ) {
-			$this->control->checkoutNewBranch( $this->newVersion, "origin/master" );
-			// $this->setOrigin( $this->clonePath );
 		}
 	}
 
@@ -610,7 +597,7 @@ abstract class Branch {
 					? $branchName
 					: $this->branchPrefix . $this->oldVersion;
 
-		$this->createAndUseNew();
+		$this->create();
 		$this->handleSubmodules();
 		$this->handleVersionUpdate();
 

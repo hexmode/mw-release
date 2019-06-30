@@ -29,6 +29,8 @@ use Psr\Log\LoggerInterface;
 use React\EventLoop\Factory as LoopFactory;
 use Wikimedia\AtEase\AtEase;
 use Hexmode\PhpGerrit\GerritRestAPI;
+use Hexmode\PhpGerrit\Entity\BranchInput;
+use Hexmode\PhpGerrit\Entity\BranchInfo;
 
 class Control {
 	/** @var LoggerInterface */
@@ -43,10 +45,10 @@ class Control {
 	protected $storeOutput;
 	/** @var Branch */
 	protected $brancher;
-	/** @var array */
-	protected $localBranches;
 	/** @var ?GerritRestAPI */
 	protected $gerrit = null;
+	/** @var array */
+	protected $branchCache;
 
 	public function __construct(
 		LoggerInterface $logger,
@@ -59,7 +61,7 @@ class Control {
 		$this->output = "";
 		$this->storeOutput = false;
 		$this->brancher = $brancher;
-		$this->localBranches = [];
+		$this->branchCache = [];
 	}
 
 	/**
@@ -73,46 +75,6 @@ class Control {
 
 	protected function croak( string $msg ) :void {
 		$this->brancher->croak( $msg );
-	}
-
-	/**
-	 * Find out if the remote has this branch
-	 *
-	 * @param string $repoUrl
-	 * @param string $branch
-	 * @return bool
-	 */
-	public function hasRemoteBranch(
-		string $repoUrl,
-		string $branch
-	) :bool {
-		/**
-		 *  From manpage for git-ls-remote:
-		 *
-		 *   --exit-code
-         * Exit with status "2" when no matching refs are found in
-         * the remote repository. Usually the command exits with
-         * status "0" to indicate it successfully talked with the
-         * remote repository, whether it found any matching refs.
-		 */
-		return $this->cmd(
-			'git', 'ls-remote', '--exit-code', '--heads', $repoUrl, $branch
-		) !== 2;
-	}
-
-	/**
-	 * Add a submodule to the current git repo
-	 *
-	 * @param string $branch to use for submodule
-	 * @param string $repo to use as the remote
-	 * @param string $dir relative to root of current repo
-	 */
-	public function addSubmodule(
-		string $branch,
-		string $repo,
-		string $dir
-	) :void {
-		throw new Exception( "Implement addSubmodule!" );
 	}
 
 	/**
@@ -139,30 +101,93 @@ class Control {
 	}
 
 	/**
+	 * Determine if a branch already exists for this repository.
+	 *
+	 * @param string $repo to check
+	 * @param string $branch to check for
+	 * @return bool
+	 */
+	public function hasBranch( string $repo, string $branch ) :bool {
+		$branchList = $this->getBranches( $repo );
+		return !in_array( $branch, $branchList );
+	}
+
+	/** Return the list of branches for this repository.
+	 *
+	 * @param string $repo to get
+	 * @return array<int|string> of branches
+	 */
+	public function getBranches( string $repo ) :array {
+		$branchInfo = $this->getBranchInfo( [ $repo ] );
+		return $branchInfo[$repo];
+	}
+
+	/**
 	 * Get branch info for a list of repositories
 	 *
 	 * @param array $repo
-	 * @param array $branch to get info on
+	 * @param array $branches to get info on
 	 * @return array
 	 */
-	public function getBranchInfo( array $repo, array $branch ) :array {
+	public function getBranchInfo( array $repo ) :array {
 		if ( !$this->gerrit ) {
 			$this->croak( "Please set up the Gerrit remote first!" );
+			exit();				// Make psalm happy. Shouldn't be
+								// needed since croak() exits.
 		}
-
 		$ret = [];
-		$lookFor = array_flip( $branch );
-		foreach( $repo as $project ) {
-			$branch = $this->gerrit->getProjectBranches( $project );
-			$ret[$project] = array_filter(
-				$branch,
-				function ( $branch ) use ( $lookFor ) {
-					return isset( $lookFor[$branch] );
-				},
-				ARRAY_FILTER_USE_KEY
-			);
+		foreach ( array_filter( $repo ) as $project ) {
+			if ( !isset( $this->branchCache[$project] ) ) {
+				$this->logger->info( "Get branch information on $project." );
+				$this->branchCache[$project] = $this->gerrit->getProjectBranches( $project );
+			}
+			$ret[$project] = $this->branchCache[$project];
 		}
-		return [];
+		return $ret;
+	}
+
+	/**
+	 * Handle server-side branching
+	 *
+	 * @param string $repo
+	 * @param string $branchFrom where to base the branch from
+	 * @param string $newBranch name of new branch
+	 * @return BranchInfo
+	 */
+	public function createBranch(
+		string $repo,
+		string $branchFrom,
+		string $newBranch
+	) :BranchInfo {
+		if ( !$this->gerrit ) {
+			$this->croak( "Please set up the Gerrit remote first!" );
+			exit();				// Make psalm happy. Shouldn't be
+								// needed since croak() exits.
+		}
+		$branch = new BranchInput( [ 'ref' => $newBranch, 'revision' => $branchFrom ] );
+		return $this->gerrit->createBranch( $repo, $branch );
+	}
+
+	/**
+	 * Determine if a submodule exists
+	 *
+	 * @param string $repo primary repo
+	 * @param string $subRepo submodule'd repo
+	 * @param string $loc location repo should be as a subdir
+	 * @return bool
+	 */
+	public function hasSubmodule( string $repo, string $subRepo, string $loc ) :bool {
+	}
+
+	/**
+	 * Set up a submodule to a repo
+	 *
+	 * @param string $repo primary repo
+	 * @param string $subRepo submodule'd repo
+	 * @param string $loc location repo should be as a subdir
+	 * @return bool
+	 */
+	public function addSubmodule( string $repo, string $subRepo, string $loc ) :bool {
 	}
 
 	/**
