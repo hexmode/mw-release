@@ -407,6 +407,7 @@ abstract class Branch {
 	 * Print an error and die
 	 *
 	 * @param string $msg
+	 * @return never-returns
 	 */
 	public function croak( string $msg ) :void {
 		$this->logger->error( $msg );
@@ -482,8 +483,12 @@ abstract class Branch {
 			if ( !$this->control->hasBranch( $repo, $this->newVersion ) ) {
 				$this->branchRepo( $repo );
 			}
-			if ( !$this->control->hasSubmodule( self::mwRepo, $repo, $dir ) ) {
-				$this->addSubmodule( self::mwRepo, $repo, $dir );
+			if ( !$this->control->hasSubmodule(
+					 self::mwRepo, $repo, $dir
+			) ) {
+				$this->control->addSubmodule( self::mwRepo, $repo, $dir );
+			} else {
+				$this->control->checkoutSubmodule( self::mwRepo, $repo, $dir );
 			}
 		}
 	}
@@ -498,6 +503,10 @@ abstract class Branch {
 			$this->branchRepo( self::mwRepo );
 		}
 
+		$this->control->ensureEmptyDir( $this->getWorkDir() );
+		$this->control->clone(
+			self::mwRepo, $this->newVersion, $this->getWorkDir()
+		);
 		$this->branchAndAddGroup( $this->branchedExtensions );
 		$this->branchAndAddGroup( $this->specialExtensions );
 	}

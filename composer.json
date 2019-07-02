@@ -33,10 +33,6 @@
 	"repositories": [
 		{
 			"type": "vcs",
-			"url": "https://github.com/hexmode/php-cli"
-		},
-		{
-			"type": "vcs",
 			"url": "https://github.com/hexmode/http-basic-auth"
 		}
 	],

@@ -45,6 +45,8 @@ class Control {
 	protected $storeOutput;
 	/** @var Branch */
 	protected $brancher;
+	/** @var ?string */
+	protected $gerritURL = null;
 	/** @var ?GerritRestAPI */
 	protected $gerrit = null;
 	/** @var array */
@@ -70,9 +72,18 @@ class Control {
 	 * @param string $url
 	 */
 	public function setGerritURL( string $url ) :void {
+		$this->gerritURL = $url;
 		$this->gerrit = new GerritRestAPI( $url );
+		if ( $this->dryRun ) {
+			$this->gerrit->setReadOnly();
+		}
 	}
 
+	/**
+	 * Display error message and die
+	 *
+	 * @return never-return
+	 */
 	protected function croak( string $msg ) :void {
 		$this->brancher->croak( $msg );
 	}
@@ -109,7 +120,14 @@ class Control {
 	 */
 	public function hasBranch( string $repo, string $branch ) :bool {
 		$branchList = $this->getBranches( $repo );
-		return !in_array( $branch, $branchList );
+		$res = in_array( $branch, $branchList );
+		if ( $res ) {
+			$this->logger->debug( "Branch ($branch) exists in ($repo)" );
+		} else {
+			$this->logger->debug( "Branch ($branch) does not "
+								. "exist in ($repo)" );
+		}
+		return $res;
 	}
 
 	/** Return the list of branches for this repository.
@@ -132,14 +150,13 @@ class Control {
 	public function getBranchInfo( array $repo ) :array {
 		if ( !$this->gerrit ) {
 			$this->croak( "Please set up the Gerrit remote first!" );
-			exit();				// Make psalm happy. Shouldn't be
-								// needed since croak() exits.
 		}
 		$ret = [];
 		foreach ( array_filter( $repo ) as $project ) {
 			if ( !isset( $this->branchCache[$project] ) ) {
 				$this->logger->info( "Get branch information on $project." );
-				$this->branchCache[$project] = $this->gerrit->getProjectBranches( $project );
+				$this->branchCache[$project]
+					= $this->gerrit->listBranches( $project );
 			}
 			$ret[$project] = $this->branchCache[$project];
 		}
@@ -161,22 +178,76 @@ class Control {
 	) :BranchInfo {
 		if ( !$this->gerrit ) {
 			$this->croak( "Please set up the Gerrit remote first!" );
-			exit();				// Make psalm happy. Shouldn't be
-								// needed since croak() exits.
 		}
-		$branch = new BranchInput( [ 'ref' => $newBranch, 'revision' => $branchFrom ] );
+		$branch = new BranchInput(
+			[ 'ref' => $newBranch, 'revision' => $branchFrom ]
+		);
 		return $this->gerrit->createBranch( $repo, $branch );
+	}
+
+	/**
+	 * Checkout a branch of the reposistory
+	 *
+	 * @param string $repo primary repo
+	 * @param string $branch submodule'd repo
+	 * @param string $loc is sthe location on disk
+	 */
+	public function clone(
+		string $repo,
+		string $branch,
+		string $loc
+	) :void {
+		if ( $this->cmd(
+				 "git", "clone", "-b", $branch, $this->makeRepoURL( $repo ),
+				 $loc
+		) ) {
+			$this->croak( "Trouble cloning!" );
+		}
+	}
+
+	/**
+	 * Ensure that the given directory is completely empty by removing
+	 * it and recreating it.
+	 *
+	 * @param string $dir
+	 * @throws Exception
+	 */
+	public function ensureEmptyDir( string $dir ) :void {
+		if ( $this->cmd( "rm", "-rf", $dir ) ) {
+			throw new Exception( "Could not erase $dir!" );
+		}
+		if ( !mkdir( $dir, 0722, true ) ) {
+			throw new Exception( "Could not create $dir!" );
+		}
+	}
+
+	/**
+	 * Get a fully qualified URL for the gerrit repo.
+	 *
+	 * @param string $repo in gerrit
+	 * @return string URL
+	 */
+	public function makeRepoURL( string $repo ) : string {
+		if ( !$this->gerritURL ) {
+			$this->croak( "Please set up the Gerrit URL first!" );
+		}
+		return $this->gerritURL . "/" . $repo;
 	}
 
 	/**
 	 * Determine if a submodule exists
 	 *
 	 * @param string $repo primary repo
+	 * @param string $branch to look in
 	 * @param string $subRepo submodule'd repo
 	 * @param string $loc location repo should be as a subdir
 	 * @return bool
 	 */
-	public function hasSubmodule( string $repo, string $subRepo, string $loc ) :bool {
+	public function hasSubmodule(
+		string $repo,
+		string $subRepo,
+		string $loc
+	) :bool {
 	}
 
 	/**
@@ -187,7 +258,11 @@ class Control {
 	 * @param string $loc location repo should be as a subdir
 	 * @return bool
 	 */
-	public function addSubmodule( string $repo, string $subRepo, string $loc ) :bool {
+	public function addSubmodule(
+		string $repo,
+		string $subRepo,
+		string $loc
+	) :bool {
 	}
 
 	/**
