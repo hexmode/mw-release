@@ -73,9 +73,11 @@ thisMinorVer ?= $(strip $(if $(filter-out ---,${releaseVer}),				\
 	$(shell echo ${releaseVer} | cut -d . -f 3),---))
 export thisMinorVer
 
-isReleaseCandidate ?= $(if $(filter %-rc,${thisMinorVer}),true,)
+isReleaseCandidate=$(if $(filter %-rc,${thisMinorVer}),true,)
+rcCandidate=---
 
 ifeq (${isReleaseCandidate},true)
+	rcCandidate=$(shell echo ${releaseVer} | cut -d . -f 4)
 	thisMinorVer=0
 endif
 
@@ -107,6 +109,7 @@ ifeq "${thisMinorVer}${prevMinorVer}" "0-1"
 				'/mediawiki-${prevMajorVer}[0-9.]*.tar.gz"/ {gsub(			\
 				/^.*="mediawiki-${prevMajorVer}.|.tar.gz"[^"]*$$/,			\
 				""); print}' | sort -n | tail -1)
+	prevMinorVer=$(shell echo ${prevReleaseVer} | cut -d . -f 3)
 endif
 
 # The message to add when tagging
@@ -114,7 +117,7 @@ releaseTagMsg ?= $(strip $(if $(filter-out ---,${releaseVer}),				\
 	"MediaWiki v${releaseVer}",---))
 export releaseTagMsg
 
-# The message to add making a release
+# Release message
 releaseMsg ?= $(strip $(if $(filter-out ---,${releaseVer}),				\
 	"This is MediaWiki v${releaseVer}",---))
 export releaseMsg
@@ -156,14 +159,16 @@ defSet=includes/DefaultSettings.php
 imageName ?= mw-ab
 export imageName
 
-# The email address to use for the committer
+# Committer's email address
 gitCommitEmail ?= $(shell git config --get user.email ||					\
 	git config --global --get user.email)
 export gitCommitEmail
 
-# The name to use for the committer
+# Committer's name
 gitCommitName ?= $(shell git config --get user.name ||						\
 	git config --global --get user.name)
 export gitCommitName
 
+# Attempt to add unknown keys to our keyring
 getUnknownKeys ?= false
+export getUnknownKeys

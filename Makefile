@@ -46,6 +46,7 @@ showPreviousRelease:
 getAllTarballs: downloadTarball
 	${MAKE} getAllTarballs releaseVer=${prevReleaseVer}
 
+#
 getPreviousTarball:
 	# Fork another, or we get recursiveness
 	${MAKE} downloadTarball releaseVer=${prevReleaseVer}					\
