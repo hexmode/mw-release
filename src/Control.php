@@ -46,6 +46,8 @@ class Control {
 	/** @var Branch */
 	protected $brancher;
 	/** @var ?string */
+	protected $localGitURL = null;
+	/** @var ?string */
 	protected $gerritURL = null;
 	/** @var ?GerritRestAPI */
 	protected $gerrit = null;
@@ -79,6 +81,10 @@ class Control {
 		}
 	}
 
+	public function setLocalGitURL( ?string $url = null ) :void {
+		$this->localGitURL = $url;
+	}
+
 	/**
 	 * Display error message and die
 	 *
@@ -89,6 +95,30 @@ class Control {
 	}
 
 	/**
+	 * Change dir or die if there is a problem.
+	 *
+	 * @param string $dir
+	 */
+	public function chdir( string $dir ) :void {
+		$this->dirs[] = getcwd();
+		if ( !chdir( $dir ) ) {
+			$this->croak( "Unable to change working directory to $dir" );
+		}
+		$this->logger->debug( "$ cd $dir" );
+	}
+
+	/**
+	 * Change dir to the previous directory.
+	 */
+	public function popdir() :void {
+		$dir = array_pop( $this->dirs );
+		if ( !chdir( $dir ) ) {
+			$this->croak( "Unable to return to the $dir directory" );
+		}
+		$this->logger->debug( "$ cd $dir" );
+	}
+
+	/**
 	 * Return the output of git status --porcelain
 	 * be dealt with
 	 *
@@ -96,19 +126,6 @@ class Control {
 	 */
 	public function getChanges() :string {
 		return $this->cmdOutNoTrim( 'git', 'status', '--porcelain' );
-	}
-
-	/**
-	 * Like cmdOut, but the output isn't put through trim.
-	 *
-	 * @return string
-	 */
-	public function cmdOutNoTrim( /*...*/ ) :string {
-		$this->storeOutput = true;
-		$this->output = '';
-		$this->cmd( func_get_args() );
-		$this->storeOutput = false;
-		return $this->output;
 	}
 
 	/**
@@ -197,11 +214,20 @@ class Control {
 		string $branch,
 		string $loc
 	) :void {
-		if ( $this->cmd(
-				 "git", "clone", "-b", $branch, $this->makeRepoURL( $repo ),
-				 $loc
-		) ) {
+		$repoURL = $this->makeRepoURL( $repo );
+		if ( $this->cmd( "git", "clone", "-b", $branch, $repoURL, $loc ) ) {
 			$this->croak( "Trouble cloning!" );
+		}
+		$realRepo = $this->makeRepoURL( $repo, false );
+		if ( $repoURL !== $realRepo ) {
+			$this->chdir( $loc );
+			if ( $this->cmd( "git", "remote", "set-url", "origin", $realRepo ) ) {
+				$this->croak( "Trouble setting remote!" );
+			}
+			if ( $this->cmd( "git", "pull", "origin" ) ) {
+				$this->croak( "Couldn't update local repo!" );
+			}
+			$this->popdir();
 		}
 	}
 
@@ -225,13 +251,18 @@ class Control {
 	 * Get a fully qualified URL for the gerrit repo.
 	 *
 	 * @param string $repo in gerrit
+	 * @param bool $useLocal use a local copy
 	 * @return string URL
 	 */
-	public function makeRepoURL( string $repo ) : string {
+	public function makeRepoURL( string $repo, bool $useLocal = true ) : string {
 		if ( !$this->gerritURL ) {
 			$this->croak( "Please set up the Gerrit URL first!" );
 		}
-		return $this->gerritURL . "/" . $repo;
+		$base = $this->gerritURL;
+		if ( $this->localGitURL && $useLocal ) {
+			$base = $this->localGitURL;
+		}
+		return $base . "/" . $repo;
 	}
 
 	/**
@@ -263,6 +294,71 @@ class Control {
 		string $subRepo,
 		string $loc
 	) :bool {
+	}
+
+	/**
+	 * Try to run a command and die if it fails
+	 *
+	 * @return integer exit code
+	 */
+	public function runCmd( /*...*/ ) :int {
+		$args = func_get_args();
+		if ( is_array( $args[0] ) ) {
+			$args = $args[0];
+		}
+
+		$attempts = 0;
+		do {
+			if ( $attempts ) {
+				$this->logger->warning( "sleeping for 5s" );
+				sleep( 5 );
+			}
+			$ret = $this->cmd( $args );
+		} while ( $ret !== 0 && ++$attempts <= 5 );
+		return $ret;
+	}
+
+	/**
+	 * Return what the command sends to stdout instead of just
+	 * printing it. Stderr is still printed.
+	 *
+	 * @return string
+	 */
+	public function cmdOut( /*...*/ ) :string {
+		$this->storeOutput = true;
+		$this->output = '';
+		$this->cmd( func_get_args() );
+		$this->storeOutput = false;
+		return trim( $this->output );
+	}
+
+	/**
+	 * Like cmdOut, but the output isn't put through trim.
+	 *
+	 * @return string
+	 */
+	public function cmdOutNoTrim( /*...*/ ) :string {
+		$this->storeOutput = true;
+		$this->output = '';
+		$this->cmd( func_get_args() );
+		$this->storeOutput = false;
+		return $this->output;
+	}
+
+	/**
+	 * Conditionally (if not a dry run) run a command.
+	 *
+	 * @return int
+	 */
+	public function runWriteCmd( /*...*/ ) :int {
+		$args = func_get_args();
+		$ret = 0;
+		if ( $this->dryRun ) {
+			$this->logger->debug( "[dry-run] " . implode( ' ', $args ) );
+		} else {
+			$ret = $this->runCmd( $args );
+		}
+		return $ret;
 	}
 
 	/**
@@ -311,5 +407,17 @@ class Control {
 
 		$loop->run();
 		return $proc->close();
+	}
+
+	public function checkout( string $branch ) :void {
+		throw new \Exception( "Implement me! " . __METHOD__ );
+	}
+
+	public function checkoutSubmodule( string $topRepo, string $repo, string $dir ) :void {
+		throw new \Exception( "Implement me! " . __METHOD__ );
+	}
+
+	public function push( string $branch ) :void {
+		throw new \Exception( "Implement me! " . __METHOD__ );
 	}
 }

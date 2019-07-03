@@ -61,6 +61,8 @@ abstract class Branch {
 	protected $branchFrom;
 	/** @var bool */
 	protected $dryRun;
+	/** @var ?string */
+	protected $localGitURL;
 
 	/**
 	 * How will we refer to this branch
@@ -141,13 +143,12 @@ abstract class Branch {
 			. 'mediawiki-core.', 'p', 'path'
 		);
 		$opt->registerOption(
-			'continue-from', 'Extension from which to resume branching. '
-			. 'Mainly useful in the case where initial branching fails.',
-			'c', 'ext'
+			'keep-tmp', 'Whether to keep files in /tmp after finishing. '
+			. 'Default is to remove.', 'k'
 		);
 		$opt->registerOption(
-			'keep-tmp', 'Whether to keep files in /tmp after finishing. '
-			. 'Default is to remove', 'k'
+			'local-git-repo', 'Full path to local git repo to act as git '
+			. 'cache for Gerrit.', 'g', 'url'
 		);
 	}
 
@@ -211,11 +212,12 @@ abstract class Branch {
 			$opt->getOpt( 'branch-prefix', '' ),
 			$opt->getOpt( 'new' ),
 			$opt->getOpt( 'path', '' ),
-			$opt->getOpt( 'dryRun', true ),
+			$opt->getOpt( 'dryRun', getenv( "DRYRUN" ) !== false ),
 			// Should this just use old?
 			$opt->getOpt( 'branchFrom', 'master' ),
 			$logger
 		);
+		$brancher->setLocalGitURL( $opt->getOpt( 'local-git-repo', false ) );
 
 		if ( is_a( $brancher, self::class ) ) {
 			return $brancher;
@@ -233,8 +235,12 @@ abstract class Branch {
 		LoggerInterface $logger
 	) {
 		$this->oldVersion = $oldVersion;
-		$this->branchPrefix = $branchPrefix;
-		$this->newVersion = $newVersion;
+		$this->branchPrefix = "";
+		$this->newVersion = "master";
+		if ( !$dryRun ) {
+			$this->branchPrefix = $branchPrefix;
+			$this->newVersion = $newVersion;
+		}
 		$this->clonePath = $clonePath;
 		$this->logger = $logger;
 		$this->branchFrom = $branchFrom;
@@ -275,12 +281,23 @@ abstract class Branch {
 		}
 
 		$this->control->setGerritURL( $gerritURL );
+		$this->control->setLocalGitURL( $this->localGitURL );
 		$this->repoPath = $repoPath;
 		$this->branchPrefix = $branchPrefix;
 		$this->dryRun = $this->dryRun ?? $dryRun;
 		$this->noisy = $noisy;
 		$this->clonePath = $this->clonePath ?? "{$this->repoPath}/core";
 		$this->buildDir = $buildDir;
+	}
+
+	public function setLocalGitURL( string $localGit ) :void {
+		if ( substr( $localGit, 0, 1 ) !== '/' ) {
+			throw new Usage( "Local git URL must be a path!" );
+		}
+		if ( !is_readable( $localGit ) ) {
+			throw new Usage( "Local git URL must be readable!" );
+		}
+		$this->localGitURL = $localGit;
 	}
 
 	protected function stupidSchemaCheck(
@@ -541,7 +558,7 @@ abstract class Branch {
 	 * @param string $repo to create it for
 	 */
 	public function create( string $repo ) :void {
-		$hasBranch = $this->control->hasBranch( $this->clonePath, $this->newVersion );
+		$hasBranch = $this->control->hasBranch( $repo, $this->newVersion );
 		if ( !$hasBranch ) {
 			$this->logger->notice(
 				"Creating {$this->newVersion} for {$this->clonePath}."
@@ -606,14 +623,17 @@ abstract class Branch {
 					? $branchName
 					: $this->branchPrefix . $this->oldVersion;
 
-		$this->create();
+		$this->create( self::mwRepo );
 		$this->handleSubmodules();
 		$this->handleVersionUpdate();
+		$this->publish();
+	}
 
-		$this->control->push(
-			"origin", $this->getBranchPrefix() . $this->newVersion
-		);
-
+	/**
+	 * Push the branch to gerrit.
+	 */
+	public function publish() :void {
+		$this->control->push( self::mwRepo );
 	}
 
 	/**
