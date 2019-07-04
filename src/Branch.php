@@ -212,12 +212,12 @@ abstract class Branch {
 			$opt->getOpt( 'branch-prefix', '' ),
 			$opt->getOpt( 'new' ),
 			$opt->getOpt( 'path', '' ),
-			$opt->getOpt( 'dryRun', getenv( "DRYRUN" ) !== false ),
+			$opt->getOpt( 'dryRun', getenv( "dryRun" ) !== false ),
 			// Should this just use old?
 			$opt->getOpt( 'branchFrom', 'master' ),
 			$logger
 		);
-		$brancher->setLocalGitURL( $opt->getOpt( 'local-git-repo', false ) );
+		$brancher->setLocalGitURL( $opt->getOpt( 'local-git-repo', '' ) );
 
 		if ( is_a( $brancher, self::class ) ) {
 			return $brancher;
@@ -281,7 +281,9 @@ abstract class Branch {
 		}
 
 		$this->control->setGerritURL( $gerritURL );
-		$this->control->setLocalGitURL( $this->localGitURL );
+		if ( $this->localGitURL ) {
+			$this->control->setLocalGitURL( $this->localGitURL );
+		}
 		$this->repoPath = $repoPath;
 		$this->branchPrefix = $branchPrefix;
 		$this->dryRun = $this->dryRun ?? $dryRun;
@@ -291,6 +293,9 @@ abstract class Branch {
 	}
 
 	public function setLocalGitURL( string $localGit ) :void {
+		if ( $localGit === '' ) {
+			return;
+		}
 		if ( substr( $localGit, 0, 1 ) !== '/' ) {
 			throw new Usage( "Local git URL must be a path!" );
 		}

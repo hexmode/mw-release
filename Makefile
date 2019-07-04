@@ -106,8 +106,8 @@ tag: verifyReleaseGiven verifySecretKeyExists commitCheck
 	${MAKE} ${mwDir}/${relBranch}
 
 	(																		\
-		export modules=`${GIT} status -s extensions skins |					\
-			awk '{print $$2}'`;												\
+		export modules="`${GIT} status -s extensions skins | 				\
+			awk '{print $$2}'`";											\
 		test -z "$$modules" || (											\
 			echo ${indent}"Committing submodules: $$modules";				\
 			${GIT} add -f $$modules;										\
@@ -156,8 +156,17 @@ clone:
 		git pull ${maybeSubmodules}											\
 	) || (																	\
 		echo ${indent}"Cloning ${repo} to $${cloneDir} (${branch})";		\
-		git clone ${maybeSubmodules} -b ${branch} ${repo}					\
-			${cloneDir}														\
+		git clone ${maybeSubmodules} ${repo} ${cloneDir};					\
+		${MAKE} fixRemote;													\
+		git checkout ${branch}												\
+	)
+
+fixRemote:
+	test ! -e ${repo} -a "`${GIT} remote get-url origin`" != "${repo}" || (	\
+		echo ${indent}"Changing remote for ${cloneDir}";					\
+		cd ${cloneDir};														\
+		git remote set-url origin ${mwGit};									\
+		git fetch origin													\
 	)
 
 ${mwDir}/${relBranch}:
@@ -168,7 +177,7 @@ ${mwDir}/${relBranch}:
 	${MAKE} clone cloneDir=${mwDir}/master repo=${mwGit}					\
 		branch=master
 	git ls-remote --exit-code --heads ${mwGit} ${relBranch} ||				\
-		${makeBranch} -n ${relBranch} -d -p ${mwDir}/master tarball
+		${makeBranch} -n ${relBranch} -p ${mwDir}/master tarball
 	${MAKE} clone cloneDir=${mwDir}/${relBranch}							\
 		repo=${mwDir}/master branch=${relBranch}
 
@@ -221,10 +230,7 @@ verifyWgVersion:
 			echo ${indent}'$$wgVersion is not set to'						\
 			"${releaseVer} in ${defSet}!";									\
 			${GIT} grep '$$wgVersion = ' -- ${defSet};						\
-			echo;															\
-			echo "Try 'make bumpVersion releaseVer=${releaseVer}'";			\
-			echo; echo;														\
-			exit 2															\
+			${MAKE} bumpVersion releaseVer=${releaseVer}					\
 		)
 
 git-archive-all:

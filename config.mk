@@ -172,3 +172,11 @@ export gitCommitName
 # Attempt to add unknown keys to our keyring
 getUnknownKeys ?= false
 export getUnknownKeys
+
+# Do not push changes
+dryRun ?= true
+export dryRun
+
+ifneq (${dryRun},true)
+unexport dryRun
+endif
