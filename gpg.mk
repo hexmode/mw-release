@@ -36,12 +36,18 @@ keyId ?= $(shell git config --get user.signingkey || (						\
 	awk -F: '$$1 == "default-key" {print $$10}' | sed s,^.,,) )
 export keyId
 
+GPG_TTY=$(tty)
+export GPG_TTY
+
+${gpgDir}: ${workDir}
+	# Without the private-keys dir, secret keys are not (completely?) imported.
+	mkdir -p ${gpgDir}/private-keys-v1.d
+	test `id -u` != 0 || sudo chown -R `id -u` ${gpgDir}
+	chmod -R 700 ${gpgDir}
+
 # Fetch PGP keys from keyUrl
 .PHONY:
-fetchKeys:
-	mkdir -p ${gpgDir}
-	sudo chown `id -u` ${gpgDir}
-	chmod 700 ${gpgDir}
+fetchKeys: ${gpgDir}
 	wget -q -O - ${keyUrl} | gpg --homedir=${gpgDir} --import
 
 # Show information about the key used for signing.
@@ -73,12 +79,12 @@ verifyFile:
 
 #
 verifyKeyIDSet:
-	test -n "{$keyId}" || (													\
+	test -n "${keyId}" || (													\
 		echo ${indent}"Please specify a keyId!";							\
 		echo; exit 1;														\
 	)
 
-verifySecretKeyExists: verifyKeyIDSet
+verifySecretKeyExists: ${gpgDir} verifyKeyIDSet
 	gpg --homedir=${gpgDir} --list-secret-keys ${keyId}						\
 													> /dev/null 2>&1 || (	\
 		echo ${indent}"No secret key matching '${keyId}' in the keyring at";\
@@ -96,9 +102,9 @@ checkForSecretKeyInMainKeyring: verifyKeyIDSet
 		echo ${indent}${myGpg}.												\
 	)
 
-copySecretKey: verifyKeyIDSet
+copySecretKey: ${gpgDir} verifyKeyIDSet
 	(																		\
 		gpg --homedir=${myGpg} --export-secret-key ${keyId};				\
 		gpg --homedir=${myGpg} --export ${keyId};							\
-	) | gpg --homedir=${gpgDir} --import
+	) | strace -o /tmp/st -f gpg --homedir=${gpgDir} --batch --import
 

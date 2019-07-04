@@ -22,6 +22,12 @@ include ${mkfileDir}/help.mk
 include ${mkfileDir}/config.mk
 include ${mkfileDir}/gpg.mk
 
+${workDir}:
+	echo ${workDir}
+	test -d ${workDir} || (													\
+		mkdir -p ${workDir}													\
+	)
+
 # Checkout, tag, and build a tarball
 tarball: tag doTarball
 
