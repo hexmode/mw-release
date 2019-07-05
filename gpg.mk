@@ -79,7 +79,7 @@ verifyFile:
 
 #
 verifyKeyIDSet:
-	test -n "${keyId}" || (													\
+	test -n "${keyId}" -o "${doSign}" = "false" || (						\
 		echo ${indent}"Please specify a keyId!";							\
 		echo; exit 1;														\
 	)
