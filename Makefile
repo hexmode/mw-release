@@ -250,19 +250,9 @@ git-archive-all:
 
 # Bump the version in DefaultSettings.php
 bumpVersion:
-	${GIT} grep -q 	'$$wgVersion = '\'${prevReleaseVer}\' -- ${defSet} && (	\
-		sed -i 's,^\($$wgVersion = '\''\)${prevReleaseVer},\1${releaseVer},'\
+	sed -i 's,^\($$wgVersion = '\''\)[^'\'']*,\1${releaseVer},'				\
 			${mwDir}/${relBranch}/${defSet} &&								\
-		${GIT} add ${defSet}												\
-	) || (																	\
-		echo;																\
-		echo '$@ will only work when the version is "${prevReleaseVer}"'	\
-			'is currently in ${defSet}:';									\
-		echo -n '     ';													\
-		${GIT} grep '$$wgVersion = ' -- ${defSet};							\
-		echo; echo;															\
-		exit 2																\
-	)
+		${GIT} add ${defSet}
 
 #
 checkOkToCommit:
