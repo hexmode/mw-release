@@ -153,12 +153,18 @@ removeTag: verifyReleaseGiven
 	${GIT} tag -d ${releaseVer}
 
 #
-clone:
-	echo ${indent}"Checking if this branch is in the remote"
-	# Do this twice and use the exit code the first time to fail
-	${GIT} ls-remote --heads ${mwGit} ${relBranch}
-	${GIT} ls-remote --exit-code --heads ${mwGit} ${relBranch} ||			\
-		${makeBranch} -n ${relBranch} -p ${mwDir}/master tarball
+.PHONY: ensureBranch
+ensureBranch:
+	echo -n ${indent}"Ensuring that the remote has ${relBranch}... "
+	export hasBranch=`${GIT} ls-remote --heads ${mwGit} ${relBranch} |		\
+		cut -f 2` && test "$$hasBranch" != "" ||	(							\
+			echo "no, creating ${relBranch}.";								\
+			${makeBranch} -n ${relBranch} -p ${mwDir}/master tarball		\
+	) && echo yes
+
+#
+.PHONY: clone
+clone: ensureBranch
 	test -e ${cloneDir}/.git && (											\
 		echo ${indent}"Updating ${repo} in ${cloneDir}";					\
 		cd ${cloneDir} &&													\
