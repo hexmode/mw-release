@@ -79,7 +79,7 @@ verifyFile:
 
 #
 verifyKeyIDSet:
-	test -n "${keyId}" || (													\
+	test -n "${keyId}" -o "${doSign}" = "false" || (						\
 		echo ${indent}"Please specify a keyId!";							\
 		echo; exit 1;														\
 	)
@@ -106,5 +106,5 @@ copySecretKey: ${gpgDir} verifyKeyIDSet
 	(																		\
 		gpg --homedir=${myGpg} --export-secret-key ${keyId};				\
 		gpg --homedir=${myGpg} --export ${keyId};							\
-	) | strace -o /tmp/st -f gpg --homedir=${gpgDir} --batch --import
+	) | gpg --homedir=${gpgDir} --batch --import
 
