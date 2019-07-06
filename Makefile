@@ -153,29 +153,29 @@ removeTag: verifyReleaseGiven
 #
 clone:
 	echo ${indent}"Checking if this branch is in the remote"
-	git ls-remote --exit-code --heads ${mwGit} ${relBranch} ||				\
+	${GIT} ls-remote --exit-code --heads ${mwGit} ${relBranch} ||			\
 		${makeBranch} -n ${relBranch} -p ${mwDir}/master tarball
 	test -e ${cloneDir}/.git && (											\
 		echo ${indent}"Updating ${repo} in ${cloneDir}";					\
-		cd ${cloneDir};														\
-		git fetch;															\
-		export branches="`git branch | sed "s,$$,|,"`";						\
+		cd ${cloneDir} &&													\
+		${GIT} fetch &&														\
+		export branches="`git branch | sed "s,$$,|,"`" &&					\
 		echo "$$branches" | fgrep -q '* ${branch}|' || (					\
 			echo git checkout ${branch}										\
-		);																	\
+		) &&																\
 		git pull ${maybeSubmodules}											\
 	) || (																	\
 		echo ${indent}"Cloning ${repo} to $${cloneDir} (${branch})";		\
-		git clone ${maybeSubmodules} ${repo} ${cloneDir};					\
-		${MAKE} fixRemote;													\
-		git checkout ${branch}												\
+		${GIT} clone ${maybeSubmodules} ${repo} ${cloneDir} &&				\
+		${MAKE} fixRemote &&												\
+		${GIT} checkout ${branch}											\
 	)
 
 fixRemote:
 	test ! -e ${repo} -a "`${GIT} remote get-url origin`" != "${repo}" || (	\
 		echo ${indent}"Changing remote for ${cloneDir}";					\
-		cd ${cloneDir};														\
-		git remote set-url origin ${mwGit};									\
+		cd ${cloneDir} &&													\
+		git remote set-url origin ${mwGit} &&								\
 		git fetch origin													\
 	)
 
