@@ -153,6 +153,8 @@ removeTag: verifyReleaseGiven
 #
 clone:
 	echo ${indent}"Checking if this branch is in the remote"
+	# Do this twice and use the exit code the first time to fail
+	${GIT} ls-remote --heads ${mwGit} ${relBranch}
 	${GIT} ls-remote --exit-code --heads ${mwGit} ${relBranch} ||			\
 		${makeBranch} -n ${relBranch} -p ${mwDir}/master tarball
 	test -e ${cloneDir}/.git && (											\
