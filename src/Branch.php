@@ -268,7 +268,6 @@ abstract class Branch {
 		$buildDir = $this->getWorkDir();
 		$noisy = false; // Output git commands or not
 		$dryRun = false;  // Push stuff or not
-		$gerritURL = "https://gerrit.wikimedia.org/r";
 
 		if ( is_readable( $dir . '/default.conf' ) ) {
 			require $dir . '/default.conf';
@@ -280,7 +279,7 @@ abstract class Branch {
 			require $dir . '/local.conf';
 		}
 
-		$this->control->setGerritURL( $gerritURL );
+		$this->control->setGerritURL( $repoPath );
 		if ( $this->localGitURL ) {
 			$this->control->setLocalGitURL( $this->localGitURL );
 		}
