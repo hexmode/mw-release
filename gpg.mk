@@ -106,5 +106,5 @@ copySecretKey: ${gpgDir} verifyKeyIDSet
 	(																		\
 		gpg --homedir=${myGpg} --export-secret-key ${keyId};				\
 		gpg --homedir=${myGpg} --export ${keyId};							\
-	) | strace -o /tmp/st -f gpg --homedir=${gpgDir} --batch --import
+	) | gpg --homedir=${gpgDir} --batch --import
 
