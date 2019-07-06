@@ -99,9 +99,9 @@ ifeq "${thisMinorVer}${prevMinorVer}" "0-1"
 	# previous major version releases, sorting them, and getting
 	# the last one.  Startup takes a few ms longer.
 	prevMajorVer=$(strip $(if $(filter-out ---,${releaseVer}),				\
-		$(shell echo ${releaseVer} | cut -d . -f 1).$(shell				\
+		$(shell echo ${releaseVer} | cut -d . -f 1).$(shell					\
 			echo ${releaseVer} | (cut -d . -f 2; echo 1 - p ) | dc ),---))
-	prevReleaseVer=${prevMajorVer}.$(shell									\
+	prevMinorVer=$(shell									\
 			test -f ${workDir}/out-${prevMajorVer} ||						\
 				${WGET} -O ${workDir}/out-${prevMajorVer}					\
 					${releasesUrl}${prevMajorVer}/)$(shell					\
@@ -109,7 +109,11 @@ ifeq "${thisMinorVer}${prevMinorVer}" "0-1"
 				'/mediawiki-${prevMajorVer}[0-9.]*.tar.gz"/ {gsub(			\
 				/^.*="mediawiki-${prevMajorVer}.|.tar.gz"[^"]*$$/,			\
 				""); print}' | sort -n | tail -1)
-	prevMinorVer=$(shell echo ${prevReleaseVer} | cut -d . -f 3)
+	prevReleaseVer=${prevMajorVer}.${prevMinorVer}
+endif
+
+ifeq "${prevMinorVer}" "-1"
+	prevMinorVer=---
 endif
 
 # The message to add when tagging
@@ -118,7 +122,7 @@ releaseTagMsg ?= $(strip $(if $(filter-out ---,${releaseVer}),				\
 export releaseTagMsg
 
 # Release message
-releaseMsg ?= $(strip $(if $(filter-out ---,${releaseVer}),				\
+releaseMsg ?= $(strip $(if $(filter-out ---,${releaseVer}),					\
 	"This is MediaWiki v${releaseVer}",---))
 export releaseMsg
 

@@ -18,6 +18,7 @@
 # from https://stackoverflow.com/questions/18136918/how-to-get-current-relative-directory-of-your-makefile
 mkfilePath := $(abspath $(lastword $(MAKEFILE_LIST)))
 mkfileDir := $(patsubst %/,%,$(dir $(mkfilePath)))
+include $(shell echo local.m*k | grep \\.mk$$)
 include ${mkfileDir}/help.mk
 include ${mkfileDir}/config.mk
 include ${mkfileDir}/gpg.mk

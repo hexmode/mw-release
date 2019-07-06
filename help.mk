@@ -33,11 +33,11 @@ help:
 			 print "   ", $$1, comment										\
 		}' $(MAKEFILE_LIST) | column -t -s ':' | sort
 	@ echo ''
-	@ echo '  Flags:'
+	@ echo '  Flags: (Defaults in parenthesis)'
 	@ echo ''
 	@ awk '/^#/{ comment = substr($$0,3) } comment							\
 		 && /^[a-zA-Z][a-zA-Z0-9_-]+ ?\?= *([^=].*)$$/ {					\
 			print "   ", $$1, $$2, comment, 								\
-			"(Default: " ENVIRON[$$1] ")"									\
+			"(" ENVIRON[$$1] ")"									\
 		}' $(MAKEFILE_LIST) | column -t -s '?=' | sort
 	@ echo ''
