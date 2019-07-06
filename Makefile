@@ -112,12 +112,14 @@ commitCheck:
 tag: verifyReleaseGiven verifySecretKeyExists commitCheck
 	${MAKE} ${mwDir}/${relBranch}
 
+	# Quickest way to fail
+	${GIT} config --worktree -l > /dev/null &&								\
 	(																		\
 		export modules="`${GIT} status -s extensions skins | 				\
 			awk '{print $$2}'`";											\
 		test -z "$$modules" || (											\
 			echo ${indent}"Committing submodules: $$modules";				\
-			${GIT} add -f $$modules;										\
+			${GIT} add -f $$modules &&										\
 			${GIT} commit -m "Updating submodules for ${releaseVer}"		\
 				$$modules													\
 		)																	\
