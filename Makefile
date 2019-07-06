@@ -109,7 +109,7 @@ commitCheck:
 		( echo ${indent}"Set gitCommitName!"; exit 2 )
 
 
-ensureCommitted: ${mwDir}/${relBranch}
+ensureCommitted: ${mwDir}/${relBranch} commitCheck
 	# Quickest way to fail
 	${GIT} config --worktree -l > /dev/null &&								\
 	(																		\
@@ -160,7 +160,7 @@ ${mwDir}/${relBranch}:
 		echo ${indent}"No release branch given";							\
 		echo; exit 1														\
 	)
-	${MAKE} clone cloneDir=${mwDir}/master repo=${mwGit}					\
+	${MAKE} clone cloneDir=${mwDir}/master repo=${localMwGit}				\
 		branch=master
 	${MAKE} clone cloneDir=${mwDir}/${relBranch}							\
 		repo=${mwDir}/master branch=${relBranch}
@@ -178,7 +178,7 @@ ensureBranch:
 	)
 
 updateBranch:
-	echo ${indent}"Updating ${repo} in ${cloneDir}";						\
+	echo ${indent}"Updating from ${repo} in ${cloneDir}";					\
 	cd ${cloneDir} && ${GIT} fetch &&										\
 	export branches="`git branch | sed "s,$$,|,"`" &&						\
 	echo "$$branches" | fgrep -q '* ${branch}|' ||							\
@@ -186,10 +186,10 @@ updateBranch:
 		git pull ${maybeSubmodules}
 
 realClone:
-	echo ${indent}"Cloning ${repo} to $${cloneDir} (${branch})";			\
-	${GIT} clone ${maybeSubmodules} ${repo} ${cloneDir} &&					\
-	${MAKE} fixRemote &&													\
-	${GIT} checkout ${branch}
+	echo ${indent}"Cloning from ${repo} to $${cloneDir} (${branch})";		\
+	git init ${mwDir}/${branch};											\
+	${GIT} remote add origin ${repo} && ${GIT} fetch &&						\
+	${MAKE} fixRemote && ${GIT} checkout ${branch}
 
 #
 .PHONY: clone
@@ -200,10 +200,11 @@ clone: ensureBranch
 
 fixRemote:
 	test ! -e ${repo} -a "`${GIT} remote get-url origin`" != "${repo}" || (	\
-		echo ${indent}"Changing remote for ${cloneDir}";					\
+		echo ${indent}"Changing remote for ${cloneDir} to ${mwGit}";		\
 		cd ${cloneDir} &&													\
 		git remote set-url origin ${mwGit} &&								\
-		git fetch origin													\
+		git pull;													\
+		echo ${indent}"remote fixed."										\
 	)
 
 # Show revision matching HEAD.

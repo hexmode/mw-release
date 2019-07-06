@@ -37,8 +37,8 @@ thisDir=$(patsubst %/,%,$(dir $(abspath $(lastword ${MAKEFILE_LIST}))))
 releasesUrl=https://releases.wikimedia.org/mediawiki/
 
 # Following are variables for commands and any standard args
-GIT=git --no-pager --work-tree=${mwDir}/${branch}							\
-		--git-dir=${mwDir}/${branch}/.git
+GIT=git --no-pager --git-dir=${mwDir}/${branch}/.git						\
+	--work-tree=${mwDir}/${branch}
 MAKE=make -f $(abspath $(firstword ${MAKEFILE_LIST})) indent="${indent}\> "	\
 	releaseVer=${releaseVer}
 WGET=wget ${wgetQuiet}
@@ -136,6 +136,10 @@ relBranch ?= $(strip $(if $(filter-out ---,${releaseVer}),					\
 	echo ${releaseVer} | cut -d . -f 2),---))
 export relBranch
 
+#
+branch ?= ${relBranch}
+export relBranch
+
 # MediaWiki checkout directory
 mwDir=${workDir}/mediawiki
 export mwDir
@@ -153,6 +157,9 @@ export extractDir
 
 mwGit ?= ${gerritHead}/mediawiki/core
 export mwGit
+
+localMwGit ?= ${mwGit}
+export localMwGit
 
 releaseDir=${workDir}/release
 makeRelease=${releaseDir}/make-release/makerelease2.py
