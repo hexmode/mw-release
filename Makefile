@@ -108,10 +108,8 @@ commitCheck:
 	test -n "${gitCommitName}" ||											\
 		( echo ${indent}"Set gitCommitName!"; exit 2 )
 
-# Tag the checkout with the releaseVer.
-tag: verifyReleaseGiven verifySecretKeyExists commitCheck
-	${MAKE} ${mwDir}/${relBranch}
 
+ensureCommitted: ${mwDir}/${relBranch}
 	# Quickest way to fail
 	${GIT} config --worktree -l > /dev/null &&								\
 	(																		\
@@ -130,6 +128,9 @@ tag: verifyReleaseGiven verifySecretKeyExists commitCheck
 		echo; exit 1														\
 	)
 
+# Tag the checkout with the releaseVer.
+.PHONY: tag
+tag: ensureCommitted verifyReleaseGiven verifySecretKeyExists commitCheck
 	test -n "$(filter-out true,${doTags})" || (								\
 		echo Tagging submodules... &&										\
 		cd ${mwDir}/${relBranch} &&											\
@@ -143,7 +144,7 @@ tag: verifyReleaseGiven verifySecretKeyExists commitCheck
 maybeSubmodules=$(if $(filter-out false,${fetchSubmodules}),				\
 	--recurse-submodules)
 
-removeTag: verifyReleaseGiven
+removeTag: ${mwDir}/${relBranch} verifyReleaseGiven
 	${GIT} fetch ${maybeSubmodules}
 	(																		\
 		cd ${mwDir}/${relBranch};											\
@@ -152,34 +153,50 @@ removeTag: verifyReleaseGiven
 	)
 	${GIT} tag -d ${releaseVer}
 
+
+#
+${mwDir}/${relBranch}:
+	test "${relBranch}" != "---" -a "${relBranch}" != "" || (					\
+		echo ${indent}"No release branch given";							\
+		echo; exit 1														\
+	)
+	${MAKE} clone cloneDir=${mwDir}/master repo=${mwGit}					\
+		branch=master
+	${MAKE} clone cloneDir=${mwDir}/${relBranch}							\
+		repo=${mwDir}/master branch=${relBranch}
+
 #
 .PHONY: ensureBranch
 ensureBranch:
-	echo -n ${indent}"Ensuring that the remote has ${relBranch}... "
-	export hasBranch=`${GIT} ls-remote --heads ${mwGit} ${relBranch} |		\
-		cut -f 2` && test "$$hasBranch" != "" ||	(							\
-			echo "no, creating ${relBranch}.";								\
-			${makeBranch} -n ${relBranch} -p ${mwDir}/master tarball		\
-	) && echo yes
+	test "${branch}" = "master" && exit || (								\
+		echo -n ${indent}"Ensuring that the remote has ${branch}... ";		\
+		export hasBranch=`${GIT} ls-remote --heads ${mwGit} ${branch} |		\
+			cut -f 2` && test "$$hasBranch" != "" ||	(						\
+				echo "no, creating ${branch}.";								\
+				${makeBranch} -n ${branch} -p ${mwDir}/master tarball		\
+		) && echo yes														\
+	)
+
+updateBranch:
+	echo ${indent}"Updating ${repo} in ${cloneDir}";						\
+	cd ${cloneDir} && ${GIT} fetch &&										\
+	export branches="`git branch | sed "s,$$,|,"`" &&						\
+	echo "$$branches" | fgrep -q '* ${branch}|' ||							\
+		git checkout ${branch} &&											\
+		git pull ${maybeSubmodules}
+
+realClone:
+	echo ${indent}"Cloning ${repo} to $${cloneDir} (${branch})";			\
+	${GIT} clone ${maybeSubmodules} ${repo} ${cloneDir} &&					\
+	${MAKE} fixRemote &&													\
+	${GIT} checkout ${branch}
 
 #
 .PHONY: clone
 clone: ensureBranch
-	test -e ${cloneDir}/.git && (											\
-		echo ${indent}"Updating ${repo} in ${cloneDir}";					\
-		cd ${cloneDir} &&													\
-		${GIT} fetch &&														\
-		export branches="`git branch | sed "s,$$,|,"`" &&					\
-		echo "$$branches" | fgrep -q '* ${branch}|' || (					\
-			echo git checkout ${branch}										\
-		) &&																\
-		git pull ${maybeSubmodules}											\
-	) || (																	\
-		echo ${indent}"Cloning ${repo} to $${cloneDir} (${branch})";		\
-		${GIT} clone ${maybeSubmodules} ${repo} ${cloneDir} &&				\
-		${MAKE} fixRemote &&												\
-		${GIT} checkout ${branch}											\
-	)
+	test -e ${cloneDir}/.git ||												\
+		${MAKE} realClone &&												\
+		${MAKE} updateBranch
 
 fixRemote:
 	test ! -e ${repo} -a "`${GIT} remote get-url origin`" != "${repo}" || (	\
@@ -188,16 +205,6 @@ fixRemote:
 		git remote set-url origin ${mwGit} &&								\
 		git fetch origin													\
 	)
-
-${mwDir}/${relBranch}:
-	test "${relBranch}" != "---" || (										\
-		echo ${indent}"No release branch given";							\
-		echo; exit 1														\
-	)
-	${MAKE} clone cloneDir=${mwDir}/master repo=${mwGit}					\
-		branch=master
-	${MAKE} clone cloneDir=${mwDir}/${relBranch}							\
-		repo=${mwDir}/master branch=${relBranch}
 
 # Show revision matching HEAD.
 showHeadRev: fetchSubmodules=false

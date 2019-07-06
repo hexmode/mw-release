@@ -37,8 +37,8 @@ thisDir=$(patsubst %/,%,$(dir $(abspath $(lastword ${MAKEFILE_LIST}))))
 releasesUrl=https://releases.wikimedia.org/mediawiki/
 
 # Following are variables for commands and any standard args
-GIT=git --no-pager --work-tree=${mwDir}/${relBranch}						\
-		--git-dir=${mwDir}/${relBranch}/.git
+GIT=git --no-pager --work-tree=${mwDir}/${branch}							\
+		--git-dir=${mwDir}/${branch}/.git
 MAKE=make -f $(abspath $(firstword ${MAKEFILE_LIST})) indent="${indent}\> "	\
 	releaseVer=${releaseVer}
 WGET=wget ${wgetQuiet}
