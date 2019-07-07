@@ -2,7 +2,13 @@
 /srv/
 flycheck_*
 *~
-composer.lock
+
 default.conf
 local.conf
 local.mk
+
+composer.lock
+composer
+composer-setup.php
+expected
+installer
