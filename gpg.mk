@@ -30,6 +30,8 @@ doNotFail=$(if $(filter-out true,${noSigOk}),true,false)
 doSign ?= false
 export doSign
 
+signTagIfSigning=$(if $(filter-out false,${doSign}},-s,-a)
+
 # KeyID to use
 keyId ?= $(shell git config --get user.signingkey || (						\
 	gpgconf --list-options gpg |											\

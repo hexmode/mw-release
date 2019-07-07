@@ -52,6 +52,9 @@ export gerritHead
 fetchSubmodules ?= true
 export fetchSubmodules
 
+maybeSubmodules=$(if $(filter-out false,${fetchSubmodules}),				\
+	--recurse-submodules)
+
 # What version is being released
 releaseVer ?= ---
 export releaseVer
@@ -192,3 +195,5 @@ export dryRun
 ifneq (${dryRun},true)
 unexport dryRun
 endif
+
+php=php

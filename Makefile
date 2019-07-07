@@ -22,6 +22,7 @@ include $(shell echo local.m*k | grep \\.mk$$)
 include ${mkfileDir}/help.mk
 include ${mkfileDir}/config.mk
 include ${mkfileDir}/gpg.mk
+include ${mkfileDir}/composer.mk
 
 ${workDir}:
 	echo ${workDir}
@@ -29,9 +30,24 @@ ${workDir}:
 		mkdir -p ${workDir}													\
 	)
 
+#
+.PHONY: updateVendor
+updateVendor: ${mwDir}/${relBranch} composer commitCheck
+	test -d ${mwDir}/${relBranch}/vendor || (								\
+		echo Please add the vendor directory.								\
+		exit 1																\
+	)
+	(																		\
+		cd ${mwDir}/${relBranch} &&											\
+		${php} ${mkfileDir}/composer update --no-dev &&						\
+		cd vendor && git commit -m ${releaseMsg} -a &&						\
+		cd ${mwDir}/${relBranch} &&											\
+		git add vendor														\
+	)
+
 # Checkout, tag, and build a tarball
 .PHONY: tarball
-tarball: tag doTarball
+tarball: updateVendor tag doTarball
 
 # Just build tarball with already checked out code
 .PHONY: doTarball
@@ -96,7 +112,7 @@ downloadFile:
 	mkdir -p ${targetDir}
 
 	test -f ${targetDir}/${targetFile} || (									\
-		echo -n Downloading ${targetFile}...;								\
+		echo -n Downloading ${targetFile}... &&								\
 		${WGET} ${releasesUrl}${majorReleaseVer}/${targetFile}				\
 			-O ${targetDir}/${targetFile} || (								\
 			echo; echo Could not download ${targetFile}; 					\
@@ -116,6 +132,14 @@ commitCheck:
 		( echo ${indent}"Set gitCommitEmail!"; exit 2 )
 	test -n "${gitCommitName}" ||											\
 		( echo ${indent}"Set gitCommitName!"; exit 2 )
+	test -n "`git config --get user.email`" || (							\
+		echo ${indent}"Setting commit email to '${gitCommitEmail}'";		\
+		git config user.email ${gitCommitEmail}								\
+	)
+	test -n "`git config --get user.name`" || (								\
+		echo ${indent}"Setting commit name to '${gitCommitName}'";			\
+		git config user.name "${gitCommitName}"								\
+	)
 
 .PHONY: ensureCommitted
 ensureCommitted: ${mwDir}/${relBranch} commitCheck
@@ -123,9 +147,9 @@ ensureCommitted: ${mwDir}/${relBranch} commitCheck
 	${GIT} config --worktree -l > /dev/null &&								\
 	(																		\
 		export modules="`${GIT} status -s extensions skins | 				\
-			awk '{print $$2}'`";											\
+			awk '{print $$2}'`" &&											\
 		test -z "$$modules" || (											\
-			echo ${indent}"Committing submodules: $$modules";				\
+			echo ${indent}"Committing submodules: $$modules" &&				\
 			${GIT} add -f $$modules &&										\
 			${GIT} commit -m "Updating submodules for ${releaseVer}"		\
 				$$modules													\
@@ -143,18 +167,17 @@ tag: ensureCommitted verifyReleaseGiven verifySecretKeyExists commitCheck
 	test -n "$(filter-out true,${doTags})" || (								\
 		cd ${mwDir}/${relBranch} &&											\
 		${GIT} submodule -q	foreach											\
-			sh -c 'echo Tagging $$name; echo git tag -a ${releaseVer} -m	\
-				 ${releaseTagMsg}' &&										\
-		test `${GIT} tag -l ${releaseVer} | wc -l` -ne 0  || (				\
-			echo Tagging core with ${releaseVer};							\
-			${GIT} tag -a ${releaseVer} -m ${releaseTagMsg}					\
+			sh -c 'echo Tagging $$name; echo git tag ${signTagIfSigning}	\
+				${releaseVer} -m ${releaseTagMsg}' &&						\
+		test `${GIT} tag -l ${releaseVer} -m ${releaseTagMsg} | wc -l`		\
+				-ne 0  || (													\
+			echo Tagging core with ${releaseVer} &&							\
+			${GIT} tag ${signTagIfSigning} ${releaseVer} 					\
+				-m ${releaseTagMsg}											\
 		)																	\
 	)
 
 # Remove the tag specified in releaseVer.
-maybeSubmodules=$(if $(filter-out false,${fetchSubmodules}),				\
-	--recurse-submodules)
-
 .PHONY: removeTag
 removeTag: ${mwDir}/${relBranch} verifyReleaseGiven
 	${GIT} fetch ${maybeSubmodules}
@@ -174,7 +197,7 @@ ${mwDir}/${relBranch}:
 	)
 	${MAKE} clone cloneDir=${mwDir}/master repo=${localMwGit}				\
 		branch=master
-	${MAKE} clone cloneDir=${mwDir}/${relBranch}							\
+	${MAKE} clone cloneDir=${mwDir}/${relBranch}			\
 		repo=${mwDir}/master branch=${relBranch}
 
 #
@@ -191,11 +214,15 @@ ensureBranch:
 
 .PHONY: updateBranch
 updateBranch:
-	echo ${indent}"Updating from ${repo} in ${cloneDir}";					\
-	cd ${cloneDir} && ${GIT} fetch &&										\
+	cd ${cloneDir} &&														\
+	echo ${indent}"Updating from `git remote get-url origin` in"			\
+		 ${cloneDir} &&														\
+	${GIT} fetch &&															\
 	export branches="`git branch | sed "s,$$,|,"`" &&						\
 	echo "$$branches" | fgrep -q '* ${branch}|' ||							\
 		git checkout ${branch} &&											\
+		$(if $(filter-out false,${fetchSubmodules}),						\
+			git submodule update --init,true) &&							\
 		git pull ${maybeSubmodules}
 
 .PHONY: realClone
@@ -203,7 +230,7 @@ realClone:
 	echo ${indent}"Cloning from ${repo} to ${cloneDir} (${branch})";		\
 	git init ${mwDir}/${branch};											\
 	${GIT} remote add origin ${repo} && ${GIT} fetch &&						\
-	${MAKE} fixRemote && ${GIT} checkout ${branch}
+	${MAKE} fixRemote && ${GIT} checkout ${maybeSubmodules} ${branch}
 
 #
 .PHONY: clone
@@ -218,7 +245,7 @@ fixRemote:
 		echo ${indent}"Changing remote for ${cloneDir} to ${mwGit}";		\
 		cd ${cloneDir} &&													\
 		git remote set-url origin ${mwGit} &&								\
-		git pull;															\
+		git pull origin ${branch} &&										\
 		echo ${indent}"remote fixed."										\
 	)
 
