@@ -161,6 +161,7 @@ export mwGit
 localMwGit ?= ${mwGit}
 export localMwGit
 
+releaseRepo=https://gerrit.wikimedia.org/r/mediawiki/tools/release
 releaseDir=${workDir}/release
 makeRelease=${releaseDir}/make-release/makerelease2.py
 

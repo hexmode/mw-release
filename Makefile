@@ -30,9 +30,11 @@ ${workDir}:
 	)
 
 # Checkout, tag, and build a tarball
+.PHONY: tarball
 tarball: tag doTarball
 
 # Just build tarball with already checked out code
+.PHONY: doTarball
 doTarball: verifyReleaseGiven getMakeRelease getPreviousTarball				\
 		git-archive-all verifyWgVersion
 	test -f ${mwDir}/${relBranch}/.git/config || (							\
@@ -46,20 +48,24 @@ doTarball: verifyReleaseGiven getMakeRelease getPreviousTarball				\
 		--output_dir ${targetDir} ${mwDir}/${relBranch} ${releaseVer}
 
 #
+.PHONY: showPreviousRelease
 showPreviousRelease:
 	echo "${prevReleaseVer}"
 
 # Retreive all artifacts from the release server before releaseVer.
+.PHONY: getAllTarballs
 getAllTarballs: downloadTarball
 	${MAKE} getAllTarballs releaseVer=${prevReleaseVer}
 
 #
+.PHONY: getPreviousTarball
 getPreviousTarball:
 	# Fork another, or we get recursiveness
 	${MAKE} downloadTarball releaseVer=${prevReleaseVer}					\
 		majorReleaseVer=${prevMajorVer}
 
 # Download all artifacts for a release.
+.PHONY: downloadTarball
 downloadTarball:
 	test -n "${thisMinorVer}" -a "${thisMinorVer}" != "---" || (				\
 		echo ${indent}"Minor version not found in '${releaseVer}'!";		\
@@ -76,6 +82,7 @@ downloadTarball:
 		targetFile=mediawiki-i18n-${releaseVer}.patch.gz || true
 
 #
+.PHONY: downloadAndVerifyFile
 downloadAndVerifyFile:
 	test -f ${targetDir}/${targetFile} -a ${targetDir}/${targetFile}.sig ||(\
 		${MAKE} downloadFile targetFile=${targetFile} &&					\
@@ -84,6 +91,7 @@ downloadAndVerifyFile:
 	${MAKE} verifyFile sigFile=${targetDir}/${targetFile}.sig
 
 ${targetDir}/${targetFile}: downloadFile
+.PHONY: downloadFile
 downloadFile:
 	mkdir -p ${targetDir}
 
@@ -97,18 +105,19 @@ downloadFile:
 		)																	\
 	)
 
-getMakeRelease: repo=${gerritHead}/mediawiki/tools/release
-getMakeRelease: cloneDir=${releaseDir}
-getMakeRelease: branch=master
-getMakeRelease: clone
+.PHONY: getMakeRelease
+getMakeRelease: ${releaseDir}
+${releaseDir}:
+	git clone ${releaseRepo} ${releaseDir}
 
+.PHONY: commitCheck
 commitCheck:
 	test -n "${gitCommitEmail}" ||											\
 		( echo ${indent}"Set gitCommitEmail!"; exit 2 )
 	test -n "${gitCommitName}" ||											\
 		( echo ${indent}"Set gitCommitName!"; exit 2 )
 
-
+.PHONY: ensureCommitted
 ensureCommitted: ${mwDir}/${relBranch} commitCheck
 	# Quickest way to fail
 	${GIT} config --worktree -l > /dev/null &&								\
@@ -132,18 +141,21 @@ ensureCommitted: ${mwDir}/${relBranch} commitCheck
 .PHONY: tag
 tag: ensureCommitted verifyReleaseGiven verifySecretKeyExists commitCheck
 	test -n "$(filter-out true,${doTags})" || (								\
-		echo Tagging submodules... &&										\
 		cd ${mwDir}/${relBranch} &&											\
 		${GIT} submodule -q	foreach											\
-			git tag -a ${releaseVer} -m ${releaseTagMsg} &&					\
-		echo Tagging core... &&												\
-		${GIT} tag -a ${releaseVer} -m ${releaseTagMsg}						\
+			sh -c 'echo Tagging $$name; echo git tag -a ${releaseVer} -m	\
+				 ${releaseTagMsg}' &&										\
+		test `${GIT} tag -l ${releaseVer} | wc -l` -ne 0  || (				\
+			echo Tagging core with ${releaseVer};							\
+			${GIT} tag -a ${releaseVer} -m ${releaseTagMsg}					\
+		)																	\
 	)
 
 # Remove the tag specified in releaseVer.
 maybeSubmodules=$(if $(filter-out false,${fetchSubmodules}),				\
 	--recurse-submodules)
 
+.PHONY: removeTag
 removeTag: ${mwDir}/${relBranch} verifyReleaseGiven
 	${GIT} fetch ${maybeSubmodules}
 	(																		\
@@ -177,6 +189,7 @@ ensureBranch:
 		) && echo yes														\
 	)
 
+.PHONY: updateBranch
 updateBranch:
 	echo ${indent}"Updating from ${repo} in ${cloneDir}";					\
 	cd ${cloneDir} && ${GIT} fetch &&										\
@@ -185,8 +198,9 @@ updateBranch:
 		git checkout ${branch} &&											\
 		git pull ${maybeSubmodules}
 
+.PHONY: realClone
 realClone:
-	echo ${indent}"Cloning from ${repo} to $${cloneDir} (${branch})";		\
+	echo ${indent}"Cloning from ${repo} to ${cloneDir} (${branch})";		\
 	git init ${mwDir}/${branch};											\
 	${GIT} remote add origin ${repo} && ${GIT} fetch &&						\
 	${MAKE} fixRemote && ${GIT} checkout ${branch}
@@ -198,21 +212,24 @@ clone: ensureBranch
 		${MAKE} realClone &&												\
 		${MAKE} updateBranch
 
+.PHONY: fixRemote
 fixRemote:
 	test ! -e ${repo} -a "`${GIT} remote get-url origin`" != "${repo}" || (	\
 		echo ${indent}"Changing remote for ${cloneDir} to ${mwGit}";		\
 		cd ${cloneDir} &&													\
 		git remote set-url origin ${mwGit} &&								\
-		git pull;													\
+		git pull;															\
 		echo ${indent}"remote fixed."										\
 	)
 
 # Show revision matching HEAD.
+.PHONY: showHeadRev
 showHeadRev: fetchSubmodules=false
 showHeadRev: ${mwDir}/${relBranch}
 	${GIT} log -1 --oneline
 
 # Make sure the releaseVer tag is signed correctly.
+.PHONY: verifyTag
 verifyTag: verifyReleaseGiven
 	${MAKE} ${mwDir}/${relBranch}
 	echo ${indent}"Checking core"
@@ -239,17 +256,20 @@ verifyTag: verifyReleaseGiven
 	)
 
 #
+.PHONY: verifyReleaseGiven
 verifyReleaseGiven:
 	test "${releaseVer}" != "---" || (										\
 		echo ${indent}"Please specify releaseVer!";							\
 		echo; exit 1														\
 	)
 
+.PHONY: verifyReleaseExists
 verifyRevisionExists: ${mwDir}/${relBranch}
 	$(if $(filter-out 0,$(shell												\
 			${GIT} ls-tree ${revision} | wc -l								\
 	)), exit 0, exit 1)
 
+.PHONY: verifyWgVersion
 verifyWgVersion:
 	${GIT} grep -q 															\
 		'$$wgVersion = '\'${releaseVer}\' -- ${defSet} || (					\
@@ -269,12 +289,14 @@ git-archive-all:
 	)
 
 # Bump the version in DefaultSettings.php
+.PHONY: bumpVersion
 bumpVersion:
 	sed -i 's,^\($$wgVersion = '\''\)[^'\'']*,\1${releaseVer},'				\
 			${mwDir}/${relBranch}/${defSet} &&								\
 		${GIT} add ${defSet}
 
 #
+.PHONY: checkOkToCommit
 checkOkToCommit:
 	test `${GIT} status --porcelain | wc -l` -eq 0 || (						\
 		${GIT} status --porcelain | awk '/^ M/ {print $$2}' |				\
@@ -290,10 +312,12 @@ checkOkToCommit:
 	)
 	touch $@					# Also see post commit where this is rm'd
 
+.PHONY: commit
 commit: checkOkToCommit
 	${GIT} commit -m ${releaseMsg}
 	rm -f checkOkToCommit
 
+.PHONY: verifyExists
 verifyExists:
 	test -f ${targetDir}/${targetFile} || (									\
 		echo "${targetFile} does not exist";								\
@@ -302,17 +326,21 @@ verifyExists:
 
 	${MAKE} verifyFile sigFile=${targetDir}/${targetFile}.sig
 
+.PHONY: diffExists
 diffExists:
 	${MAKE} verifyExists targetFile=mediawiki-${releaseVer}.patch.gz
 
+.PHONY: releaseExists
 releaseExists:
 	${MAKE} verifyExists targetFile=mediawiki-${releaseVer}.tar.gz
 
+.PHONY: extractRelease
 extractRelease: releaseExists
 	mkdir -p ${extractDir}
 	tar -C ${extractDir} -xzf mediawiki-${releaseVer}.tar.gz
 
 # Check diff for a given releasea
+.PHONY: checkDiff
 checkDiff: diffExists extractRelease extractPrevRelease
 	echo ${indent}Applying diff
 	cd ${extractDir}/${prevReleaseVer} &&									\
@@ -321,15 +349,18 @@ checkDiff: diffExists extractRelease extractPrevRelease
 		> this-diff.diff
 
 # Tag (and bump) source with this version
+.PHONY: tagBumpedSource
 tagBumpedSource:
 	${GIT} pull --recurse-submodules=yes
 	${MAKE} checkOkToCommit bumpVersion commit tag
 
 # Create the docker image that runs this
+.PHONY: createDocker
 createDocker:
 	docker build -t ${imageName} -f ${mkfileDir}/Dockerfile ${mkfileDir}
 
 # Test docker creation and use
+.PHONY: self-test
 self-test: commitCheck createDocker
 	sudo rm -f src/out-*
 	docker run --rm --volume ${mkfileDir}/src:/src ${imageName} 			\
