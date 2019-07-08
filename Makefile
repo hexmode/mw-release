@@ -50,7 +50,7 @@ updateVendor: ${mwDir}/${relBranch} composer commitCheck
 
 # Checkout, tag, and build a tarball
 .PHONY: tarball
-tarball: updateVendor tag doTarball
+tarball: updateVendor verifyWgVersion cleanReleaseNotes tag doTarball
 
 .PHONY: redoTarball
 redoTarball:
@@ -69,7 +69,7 @@ cleanReleaseNotes:
 # Just build tarball with already checked out code
 .PHONY: doTarball
 doTarball: verifyReleaseGiven getMakeRelease getPreviousTarball				\
-		git-archive-all verifyWgVersion cleanReleaseNotes
+		git-archive-all
 	test -f ${mwDir}/${relBranch}/.git/config || (							\
 		echo ${indent}"Check out repo first: make tarball";					\
 		echo; exit 1														\
@@ -160,8 +160,8 @@ commitCheck: verifySecretKeyExists
 		git config --global user.name "${gitCommitName}"					\
 	)
 
-.PHONY: commitSubmodules
-commitSubmodules: commitCheck
+.PHONY: commitAll
+commitAll: commitCheck
 	# Quickest way to fail
 	${GIT} config --worktree -l > /dev/null &&								\
 	(																		\
@@ -169,15 +169,14 @@ commitSubmodules: commitCheck
 				awk '{print $$2}'`" && (									\
 			test -z "$$modules" || (										\
 				echo ${indent}"Committing submodules: $$modules" &&			\
-				${GIT} add -f $$modules &&									\
-				${GIT} commit -m "Updating submodules for ${releaseVer}"	\
-					$$modules												\
+				${GIT} add -f $$modules										\
 			)																\
-		)																	\
+		);																	\
+		${GIT} commit -m ${releaseMsg}										\
 	)
 
 .PHONY: ensureCommitted
-ensureCommitted: ${mwDir}/${relBranch} commitSubmodules
+ensureCommitted: ${mwDir}/${relBranch}
 	${GIT} status -s
 	test `${GIT} status -s | wc -l` -eq 0 || (								\
 		echo ${indent}"There is uncommitted work!";							\
@@ -186,7 +185,7 @@ ensureCommitted: ${mwDir}/${relBranch} commitSubmodules
 
 # Tag the checkout with the releaseVer.
 .PHONY: tag
-tag: verifyReleaseGiven commitCheck
+tag: verifyReleaseGiven commitAll commitCheck
 	test -n "$(filter-out true,${doTags})" || (								\
 		cd ${mwDir}/${relBranch} &&											\
 		${GIT} submodule -q	foreach sh -c									\
@@ -359,11 +358,6 @@ checkOkToCommit:
 		)																	\
 	)
 	touch $@					# Also see post commit where this is rm'd
-
-.PHONY: commit
-commit: checkOkToCommit
-	${GIT} commit -m ${releaseMsg}
-	rm -f checkOkToCommit
 
 .PHONY: verifyExists
 verifyExists:
