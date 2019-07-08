@@ -41,7 +41,8 @@ updateVendor: ${mwDir}/${relBranch} composer commitCheck
 		cd ${mwDir}/${relBranch}/vendor &&									\
 		git checkout ${relBranch} && cd ${mwDir}/${relBranch} &&			\
 		${php} ${mkfileDir}/composer update --no-dev && cd vendor &&		\
-		exit `git status -s | wc -l` || (									\
+		test `git status -s | wc -l` -eq 0 || (								\
+			echo "Committing vendor changes" &&								\
 			${gitConf} commit -m ${releaseMsg} -a &&						\
 			cd ${mwDir}/${relBranch} &&	git add vendor	 					\
 		)																	\
@@ -51,10 +52,24 @@ updateVendor: ${mwDir}/${relBranch} composer commitCheck
 .PHONY: tarball
 tarball: updateVendor tag doTarball
 
+.PHONY: redoTarball
+redoTarball:
+	git tag -l | grep -q ^${oldReleaseVer}$$ || (							\
+		echo "No tag for ${oldReleaseVer}!";								\
+		exit 1																\
+	)
+	${GIT} checkout --recurse-submodules ${oldReleaseVer}
+	${MAKE} doTarball releaseVer=${oldReleaseVer}
+
+.PHONY: cleanReleaseNotes
+cleanReleaseNotes:
+	sed -i ':a;N;$$!ba;s,THIS IS NOT A RELEASE YET\n\n,,' ${relNotesFile}
+	${GIT} add ${relNotesFile}
+
 # Just build tarball with already checked out code
 .PHONY: doTarball
 doTarball: verifyReleaseGiven getMakeRelease getPreviousTarball				\
-		git-archive-all verifyWgVersion
+		git-archive-all verifyWgVersion cleanReleaseNotes
 	test -f ${mwDir}/${relBranch}/.git/config || (							\
 		echo ${indent}"Check out repo first: make tarball";					\
 		echo; exit 1														\
@@ -64,8 +79,6 @@ doTarball: verifyReleaseGiven getMakeRelease getPreviousTarball				\
 	${makeRelease} --previous ${prevReleaseVer}								\
 		$(if $(subst false,,${doSign}),--sign)								\
 		--output_dir ${targetDir} ${mwDir}/${relBranch} ${releaseVer}
-
-	cd ${mwDir}/${relBranch} && ${gitConf} commit -m "$releaseMsg"
 	${MAKE} ensureCommitted
 
 
@@ -147,20 +160,24 @@ commitCheck: verifySecretKeyExists
 		git config --global user.name "${gitCommitName}"					\
 	)
 
-.PHONY: ensureCommitted
-ensureCommitted: ${mwDir}/${relBranch} commitCheck
+.PHONY: commitSubmodules
+commitSubmodules: commitCheck
 	# Quickest way to fail
 	${GIT} config --worktree -l > /dev/null &&								\
 	(																		\
 		export modules="`${GIT} status -s extensions skins | 				\
-			awk '{print $$2}'`" &&											\
-		test -z "$$modules" || (											\
-			echo ${indent}"Committing submodules: $$modules" &&				\
-			${GIT} add -f $$modules &&										\
-			${GIT} commit -m "Updating submodules for ${releaseVer}"		\
-				$$modules													\
+				awk '{print $$2}'`" && (									\
+			test -z "$$modules" || (										\
+				echo ${indent}"Committing submodules: $$modules" &&			\
+				${GIT} add -f $$modules &&									\
+				${GIT} commit -m "Updating submodules for ${releaseVer}"	\
+					$$modules												\
+			)																\
 		)																	\
 	)
+
+.PHONY: ensureCommitted
+ensureCommitted: ${mwDir}/${relBranch} commitSubmodules
 	${GIT} status -s
 	test `${GIT} status -s | wc -l` -eq 0 || (								\
 		echo ${indent}"There is uncommitted work!";							\

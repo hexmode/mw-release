@@ -68,6 +68,7 @@ export prevMajorVer
 majorReleaseVer=$(strip $(if $(filter-out ---,${releaseVer}),				\
 	$(shell echo ${releaseVer} | cut -d . -f 1).$(shell 					\
 	echo ${releaseVer} | cut -d . -f 2),---))
+relNotesFile=${mwDir}/${relBranch}/RELEASE-NOTES-${majorReleaseVer}
 
 # This minor version
 thisMinorVer ?= $(strip $(if $(filter-out ---,${releaseVer}),				\
