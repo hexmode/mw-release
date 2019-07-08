@@ -17,7 +17,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 keyUrl=https://www.mediawiki.org/keys/keys.html
-gpgDir=${workDir}/gpg
+GNUPGHOME=${workDir}/gpg
+export GNUPGHOME
 myGpg=$(shell HOME=${oldHOME} gpgconf --list-dirs |							\
 		awk -F: '$$1 == "homedir" {print $$2}')
 
@@ -30,7 +31,7 @@ doNotFail=$(if $(filter-out true,${noSigOk}),true,false)
 doSign ?= false
 export doSign
 
-signTagIfSigning=$(if $(filter-out false,${doSign}},-s,-a)
+signTagIfSigning=$(if $(filter-out false,${doSign}),-s,-a)
 
 # KeyID to use
 keyId ?= $(shell git config --get user.signingkey || (						\
@@ -50,7 +51,7 @@ ${gpgDir}: ${workDir}
 # Fetch PGP keys from keyUrl
 .PHONY:
 fetchKeys: ${gpgDir}
-	wget -q -O - ${keyUrl} | gpg --homedir=${gpgDir} --import
+	wget -q -O - ${keyUrl} | gpg --import
 
 # Show information about the key used for signing.
 showKeyInfo:
@@ -87,8 +88,7 @@ verifyKeyIDSet:
 	)
 
 verifySecretKeyExists: ${gpgDir} verifyKeyIDSet
-	gpg --homedir=${gpgDir} --list-secret-keys ${keyId}						\
-													> /dev/null 2>&1 || (	\
+	gpg --list-secret-keys ${keyId} > /dev/null 2>&1 || (					\
 		echo ${indent}"No secret key matching '${keyId}' in the keyring at";\
 		echo ${indent} ${gpgDir}.; echo;									\
 		${MAKE} checkForSecretKeyInMainKeyring keyId=${keyId}				\
@@ -108,5 +108,5 @@ copySecretKey: ${gpgDir} verifyKeyIDSet
 	(																		\
 		gpg --homedir=${myGpg} --export-secret-key ${keyId};				\
 		gpg --homedir=${myGpg} --export ${keyId};							\
-	) | gpg --homedir=${gpgDir} --batch --import
+	) | gpg --batch --import
 

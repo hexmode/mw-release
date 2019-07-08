@@ -37,8 +37,6 @@ thisDir=$(patsubst %/,%,$(dir $(abspath $(lastword ${MAKEFILE_LIST}))))
 releasesUrl=https://releases.wikimedia.org/mediawiki/
 
 # Following are variables for commands and any standard args
-GIT=git --no-pager --git-dir=${mwDir}/${branch}/.git						\
-	--work-tree=${mwDir}/${branch}
 MAKE=make -f $(abspath $(firstword ${MAKEFILE_LIST})) indent="${indent}\> "	\
 	releaseVer=${releaseVer}
 WGET=wget ${wgetQuiet}
@@ -184,6 +182,11 @@ gitCommitName ?= $(shell git config --get user.name ||						\
 	git config --global --get user.name)
 export gitCommitName
 
+gitConf=git -c user.name="${gitCommitName}" -c user.email=${gitCommitEmail}	\
+	 --no-pager
+GIT=${gitConf} --git-dir=${mwDir}/${branch}/.git							\
+	--work-tree=${mwDir}/${branch}
+
 # Attempt to add unknown keys to our keyring
 getUnknownKeys ?= false
 export getUnknownKeys
@@ -195,5 +198,10 @@ export dryRun
 ifneq (${dryRun},true)
 unexport dryRun
 endif
+
+# Force things that can be forced
+force ?= false
+export force
+forceFlag=$(if $(filter-out false,${force}),-f)
 
 php=php

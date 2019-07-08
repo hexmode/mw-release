@@ -38,11 +38,13 @@ updateVendor: ${mwDir}/${relBranch} composer commitCheck
 		exit 1																\
 	)
 	(																		\
-		cd ${mwDir}/${relBranch} &&											\
-		${php} ${mkfileDir}/composer update --no-dev &&						\
-		cd vendor && git commit -m ${releaseMsg} -a &&						\
-		cd ${mwDir}/${relBranch} &&											\
-		git add vendor														\
+		cd ${mwDir}/${relBranch}/vendor &&									\
+		git checkout ${relBranch} && cd ${mwDir}/${relBranch} &&			\
+		${php} ${mkfileDir}/composer update --no-dev && cd vendor &&		\
+		exit `git status -s | wc -l` || (									\
+			${gitConf} commit -m ${releaseMsg} -a &&						\
+			cd ${mwDir}/${relBranch} &&	git add vendor	 					\
+		)																	\
 	)
 
 # Checkout, tag, and build a tarball
@@ -62,6 +64,10 @@ doTarball: verifyReleaseGiven getMakeRelease getPreviousTarball				\
 	${makeRelease} --previous ${prevReleaseVer}								\
 		$(if $(subst false,,${doSign}),--sign)								\
 		--output_dir ${targetDir} ${mwDir}/${relBranch} ${releaseVer}
+
+	cd ${mwDir}/${relBranch} && ${gitConf} commit -m "$releaseMsg"
+	${MAKE} ensureCommitted
+
 
 #
 .PHONY: showPreviousRelease
@@ -127,18 +133,18 @@ ${releaseDir}:
 	git clone ${releaseRepo} ${releaseDir}
 
 .PHONY: commitCheck
-commitCheck:
+commitCheck: verifySecretKeyExists
 	test -n "${gitCommitEmail}" ||											\
 		( echo ${indent}"Set gitCommitEmail!"; exit 2 )
 	test -n "${gitCommitName}" ||											\
 		( echo ${indent}"Set gitCommitName!"; exit 2 )
 	test -n "`git config --get user.email`" || (							\
 		echo ${indent}"Setting commit email to '${gitCommitEmail}'";		\
-		git config user.email ${gitCommitEmail}								\
+		git config --global user.email ${gitCommitEmail}					\
 	)
 	test -n "`git config --get user.name`" || (								\
 		echo ${indent}"Setting commit name to '${gitCommitName}'";			\
-		git config user.name "${gitCommitName}"								\
+		git config --global user.name "${gitCommitName}"					\
 	)
 
 .PHONY: ensureCommitted
@@ -155,7 +161,7 @@ ensureCommitted: ${mwDir}/${relBranch} commitCheck
 				$$modules													\
 		)																	\
 	)
-
+	${GIT} status -s
 	test `${GIT} status -s | wc -l` -eq 0 || (								\
 		echo ${indent}"There is uncommitted work!";							\
 		echo; exit 1														\
@@ -163,16 +169,14 @@ ensureCommitted: ${mwDir}/${relBranch} commitCheck
 
 # Tag the checkout with the releaseVer.
 .PHONY: tag
-tag: ensureCommitted verifyReleaseGiven verifySecretKeyExists commitCheck
+tag: verifyReleaseGiven commitCheck
 	test -n "$(filter-out true,${doTags})" || (								\
 		cd ${mwDir}/${relBranch} &&											\
-		${GIT} submodule -q	foreach											\
-			sh -c 'echo Tagging $$name; echo git tag ${signTagIfSigning}	\
-				${releaseVer} -m ${releaseTagMsg}' &&						\
-		test `${GIT} tag -l ${releaseVer} -m ${releaseTagMsg} | wc -l`		\
-				-ne 0  || (													\
+		${GIT} submodule -q	foreach sh -c									\
+				'git tag ${forceFlag} ${signTagIfSigning} ${releaseVer}		\
+					 -m ${releaseTagMsg}' && (								\
 			echo Tagging core with ${releaseVer} &&							\
-			${GIT} tag ${signTagIfSigning} ${releaseVer} 					\
+			${GIT} tag ${signTagIfSigning} ${releaseVer} ${forceFlag}		\
 				-m ${releaseTagMsg}											\
 		)																	\
 	)
@@ -184,7 +188,7 @@ removeTag: ${mwDir}/${relBranch} verifyReleaseGiven
 	(																		\
 		cd ${mwDir}/${relBranch};											\
 		${GIT} submodule foreach											\
-			'git tag -d ${releaseVer} ${force}';							\
+			'git tag -d ${releaseVer} ${forceFlag}';						\
 	)
 	${GIT} tag -d ${releaseVer}
 
