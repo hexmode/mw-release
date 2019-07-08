@@ -206,3 +206,11 @@ export force
 forceFlag=$(if $(filter-out false,${force}),-f)
 
 php=php
+
+# Release server for tarballs
+releaseServer ?= releases1001.eqiad.wmnet
+export releaseServer
+
+# Top level for tarballs on release server
+tarballDir ?= /srv/org/wikimedia/releases/mediawiki
+export tarballDir

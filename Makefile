@@ -407,6 +407,12 @@ tagBumpedSource:
 createDocker:
 	docker build -t ${imageName} -f ${mkfileDir}/Dockerfile ${mkfileDir}
 
+# Publish a release
+.PHONY: publish
+publish:
+	ssh ${releaseServer} mkdir -p ${tarballDir}/${majorReleaseVer}
+	scp ${targetDir}/*${releaseVer}* ${releaseServer}:${tarballDir}/${majorReleaseVer}
+
 # Test docker creation and use
 .PHONY: self-test
 self-test: commitCheck createDocker
