@@ -29,7 +29,6 @@ workDir ?= $(shell test -w /srv && echo /srv || echo `pwd`/srv)
 export workDir
 
 #
-oldHOME=$(shell getent passwd $$USER | cut -d: -f6)
 HOME=${workDir}
 export HOME
 

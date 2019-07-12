@@ -238,6 +238,7 @@ updateBranch:
 	echo ${indent}"Updating from `git remote get-url origin` in"			\
 		 ${cloneDir} &&														\
 	${GIT} fetch &&															\
+	git branch --set-upstream-to=origin/${branch} ${branch} &&				\
 	export branches="`git branch | sed "s,$$,|,"`" &&						\
 	echo "$$branches" | fgrep -q '* ${branch}|' ||							\
 		git checkout ${branch} &&											\
@@ -264,8 +265,8 @@ fixRemote:
 	test ! -e ${repo} -a "`${GIT} remote get-url origin`" != "${repo}" || (	\
 		echo ${indent}"Changing remote for ${cloneDir} to ${mwGit}";		\
 		cd ${cloneDir} &&													\
-		git remote set-url origin ${mwGit} &&								\
 		git pull origin ${branch} &&										\
+		git branch --set-upstream-to=origin/${branch} ${branch} &&			\
 		echo ${indent}"remote fixed."										\
 	)
 

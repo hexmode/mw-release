@@ -19,8 +19,12 @@
 keyUrl=https://www.mediawiki.org/keys/keys.html
 GNUPGHOME=${workDir}/gpg
 export GNUPGHOME
-myGpg=$(shell HOME=${oldHOME} gpgconf --list-dirs |							\
+
+#
+oldHOME ?= $(shell getent passwd $$USER | cut -d: -f6)
+myGNUPGHOME ?= $(shell GNUPGHOME= HOME=${oldHOME} gpgconf --list-dirs |		\
 		awk -F: '$$1 == "homedir" {print $$2}')
+export myGNUPGHOME
 
 # Continue without signature after downloading
 noSigOk ?= false
@@ -42,22 +46,25 @@ export keyId
 GPG_TTY=$(tty)
 export GPG_TTY
 
-${gpgDir}: ${workDir}
-	# Without the private-keys dir, secret keys are not (completely?) imported.
-	mkdir -p ${gpgDir}/private-keys-v1.d
-	test `id -u` != 0 || sudo chown -R `id -u` ${gpgDir}
-	chmod -R 700 ${gpgDir}
+${GNUPGHOME}: ${workDir}
+	# Without the private-keys dir, secret keys are not (completely?)
+	# imported.
+	mkdir -p ${GNUPGHOME}/private-keys-v1.d
+	test `id -u` != 0 || sudo chown -R `id -u` ${GNUPGHOME}
+	chmod -R 700 ${GNUPGHOME}
 
 # Fetch PGP keys from keyUrl
-.PHONY:
-fetchKeys: ${gpgDir}
+.PHONY: fetchKeys
+fetchKeys: ${GNUPGHOME}
 	wget -q -O - ${keyUrl} | gpg --import
 
 # Show information about the key used for signing.
+.PHONY: showKeyInfo
 showKeyInfo:
 	gpg --list-key ${keyId}
 
 # Verify a signature for a file
+.PHONY: verifyFile
 verifyFile:
 	test -n "${sigFile}" -a -f ${sigFile} || (								\
 		echo "The sigFile (${sigFile}) does not exist.";					\
@@ -81,32 +88,38 @@ verifyFile:
 	)
 
 #
+.PHONY: verifyKeyIDSet
 verifyKeyIDSet:
 	test -n "${keyId}" -o "${doSign}" = "false" || (						\
 		echo ${indent}"Please specify a keyId!";							\
 		echo; exit 1;														\
 	)
 
-verifySecretKeyExists: ${gpgDir} verifyKeyIDSet
-	gpg --list-secret-keys ${keyId} > /dev/null 2>&1 || (					\
+.PHONY: verifySecretKeyExists
+verifySecretKeyExists: verifyKeyIDSet
+	gpg --list-secret-keys ${keyId} > /dev/null 2>&1 || (	\
 		echo ${indent}"No secret key matching '${keyId}' in the keyring at";\
-		echo ${indent} ${gpgDir}.; echo;									\
+		echo ${indent}${GNUPGHOME}; echo;									\
 		${MAKE} checkForSecretKeyInMainKeyring keyId=${keyId}				\
 		echo; exit 1														\
 	)
 
+.PHONY: checkForSecretKeyInMainKeyring
 checkForSecretKeyInMainKeyring: verifyKeyIDSet
-	gpg --homedir=${myGpg} --list-secret-keys ${keyId} > /dev/null 2>&1 && (\
-		echo ${indent}"Secret key exists in ${myGpg}!";						\
+	gpg --homedir=${myGNUPGHOME} --list-secret-keys ${keyId} > /dev/null	\
+	2>&1 && (																\
+		echo ${indent}"Secret key exists in ${myGNUPGHOME}!";				\
 		echo ${indent}"Use 'make copySecretKey' to copy it."; echo			\
 	) || (																	\
 		echo ${indent}"No secret key matching '${keyId}' in the keyring at";\
-		echo ${indent}${myGpg}.												\
+		echo ${indent}${myGNUPGHOME}.										\
 	)
 
-copySecretKey: ${gpgDir} verifyKeyIDSet
+.PHONY: copySecretKey
+copySecretKey: ${myGNUPGHOME} verifyKeyIDSet
+	${MAKE} fetchKeys
 	(																		\
-		gpg --homedir=${myGpg} --export-secret-key ${keyId};				\
-		gpg --homedir=${myGpg} --export ${keyId};							\
+		gpg --homedir=${myGNUPGHOME} --export ${keyId};						\
+		gpg --homedir=${myGNUPGHOME} --export-secret-key ${keyId};			\
 	) | gpg --batch --import
 
