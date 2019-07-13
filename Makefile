@@ -30,11 +30,16 @@ ${workDir}:
 		mkdir -p ${workDir}													\
 	)
 
+.PHONY: submodules
+submodules: ${mwDir}/${relBranch}
+	cd $< && ${GIT} submodule update --init
+
 #
 .PHONY: updateVendor
-updateVendor: ${mwDir}/${relBranch} composer commitCheck
+updateVendor: composer commitCheck
+	${MAKE} submodules
 	test -d ${mwDir}/${relBranch}/vendor || (								\
-		echo Please add the vendor directory.								\
+		echo Please add the vendor directory.;								\
 		exit 1																\
 	)
 	(																		\
@@ -163,8 +168,8 @@ commitCheck: verifySecretKeyExists
 .PHONY: commitAll
 commitAll: commitCheck
 	# Quickest way to fail
-	${GIT} config --worktree -l > /dev/null &&								\
-	(																		\
+	${GIT} config --worktree -l > /dev/null
+	test `${GIT} status -s | wc -l` -eq 0 || (								\
 		export modules="`${GIT} status -s extensions skins | 				\
 				awk '{print $$2}'`" && (									\
 			test -z "$$modules" || (										\
@@ -217,8 +222,14 @@ ${mwDir}/${relBranch}:
 	)
 	${MAKE} clone cloneDir=${mwDir}/master repo=${localMwGit}				\
 		branch=master
-	${MAKE} clone cloneDir=${mwDir}/${relBranch}			\
+	${MAKE} ensureLocalRepoHasBranch branch=${relBranch}
+	${MAKE} clone cloneDir=${mwDir}/${relBranch}							\
 		repo=${mwDir}/master branch=${relBranch}
+
+ensureLocalRepoHasBranch:
+	cd ${mwDir}/master && git branch | grep -q ${branch} || (			\
+		git checkout -b ${branch} origin/${branch}							\
+	)
 
 #
 .PHONY: ensureBranch
@@ -249,9 +260,9 @@ updateBranch:
 .PHONY: realClone
 realClone:
 	echo ${indent}"Cloning from ${repo} to ${cloneDir} (${branch})";		\
-	git init ${mwDir}/${branch};											\
+	git init ${cloneDir} ;											\
 	${GIT} remote add origin ${repo} && ${GIT} fetch &&						\
-	${MAKE} fixRemote && ${GIT} checkout ${maybeSubmodules} ${branch}
+	${GIT} checkout ${maybeSubmodules} ${branch} && ${MAKE} fixRemote
 
 #
 .PHONY: clone
@@ -265,7 +276,7 @@ fixRemote:
 	test ! -e ${repo} -a "`${GIT} remote get-url origin`" != "${repo}" || (	\
 		echo ${indent}"Changing remote for ${cloneDir} to ${mwGit}";		\
 		cd ${cloneDir} &&													\
-		git pull origin ${branch} &&										\
+		git --no-pager branch && git pull origin ${branch} &&				\
 		git branch --set-upstream-to=origin/${branch} ${branch} &&			\
 		echo ${indent}"remote fixed."										\
 	)
@@ -330,7 +341,7 @@ verifyWgVersion:
 git-archive-all:
 	python3 -c 'import git_archive_all' || (								\
 		echo ${indent}"Installing git-archive-all";							\
-		pip3 install $@ || (												\
+		pip3 install --user $@ || (											\
 			echo Try \"sudo make git-archive-all\";							\
 			exit 2															\
 		)																	\
